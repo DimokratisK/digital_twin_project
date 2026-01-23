@@ -1,0 +1,25 @@
+name: digital_twin
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pandas
+  - numpy
+  - requests
+  - scikit-learn
+  - statsmodels
+  - pip
+  - pip:
+      - pyowm
+      - celluloid
+      - dicom2nifti
+      - jupyter
+      - imgaug
+      - tensorboard
+      - torchio
+      - torchmetrics
+      - tqdm
+      - pytorch-lightning
+      - opencv-python
+      - nibabel
+      - pydicom

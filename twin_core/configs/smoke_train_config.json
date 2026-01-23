@@ -1,0 +1,12 @@
+{
+  "data_root": "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/preprocessed",
+  "manifest_path": "preprocessed/mask_manifest.json",
+  "split_manifest_path": "preprocessed/split_manifest_labeled.json",
+  "batch_size": 4,
+  "num_workers": 0,
+  "max_epochs": 1,
+  "lr": 0.001,
+  "n_classes": 4,
+  "in_channels": 1,
+  "base_features": 64
+}

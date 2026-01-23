@@ -1,0 +1,11 @@
+[dataloaders] dataset sizes: train_samples= 20151  val_samples= 5200
+[dataloaders] train batch 0: labeled_in_batch=4/4
+[dataloaders] train batch 1: labeled_in_batch=4/4
+[dataloaders] train batch 2: labeled_in_batch=4/4
+[dataloaders] val batch 0: labeled_in_batch=3/4
+[dataloaders] val batch 1: labeled_in_batch=4/4
+Training start. Device: cuda
+Train samples: 1492 Val samples: 5200
+Config summary: {'batch_size': 4, 'lr': 0.001, 'max_epochs': 1, 'sampler_type': 'none', 'use_labeled_only': True}
+Epoch 000 finished in 5951.3s  train_loss=0.4904  val_loss=0.7974
+Training finished. Best val loss: 0.7974341969192028

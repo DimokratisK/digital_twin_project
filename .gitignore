@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Training artifacts
+logs/
+lightning_logs/
+checkpoints/
+*.ckpt
+*.pth
+
+# Data
+data/
+datasets/
+preprocessed/
+*.npy
+*.nii
+*.nii.gz
+
+# Jupyter
+.ipynb_checkpoints/
