@@ -3,10 +3,14 @@
   "manifest_path": "preprocessed/mask_manifest.json",
   "split_manifest_path": "preprocessed/split_manifest_labeled.json",
   "batch_size": 4,
-  "num_workers": 0,
-  "max_epochs": 1,
+  "num_workers": 2,
+  "max_epochs": 75,
   "lr": 0.001,
   "n_classes": 4,
   "in_channels": 1,
-  "base_features": 64
+  "base_features": 64,
+  "use_amp": true,
+  "sync_for_logging": false,
+  "cudnn_benchmark": true,
+  "exclude_missing_masks": true
 }

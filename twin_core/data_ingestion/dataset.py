@@ -1,4 +1,3 @@
-# dataset.py
 #!/usr/bin/env python3
 from pathlib import Path
 import json
@@ -102,38 +101,63 @@ class CardiacDataset(Dataset):
     - Exposes helpers for samplers and metadata inspection.
     """
 
-    def __init__(
-        self,
-        root: Path,
-        augment: Optional[A.Compose] = None,
-        prefer_ed_es: bool = False,
-        metadata_index: Optional[Dict[str, dict]] = None,
-        one_hot: bool = False,
-        n_classes: int = 4,
-        exclude_missing_masks: bool = False,
-        pad_multiple: int = 16,
-    ):
-        self.root = Path(root)
-        self.augment = augment
-        self.metadata_index = metadata_index or {}
-        self.prefer_ed_es = prefer_ed_es
-        self.one_hot = one_hot
-        self.n_classes = int(n_classes)
-        self.exclude_missing_masks = exclude_missing_masks
-        self.pad_multiple = int(pad_multiple)
+        
+def __init__(
+    self,
+    root: Path,
+    augment: Optional[A.Compose] = None,
+    prefer_ed_es: bool = False,
+    metadata_index: Optional[Dict[str, dict]] = None,
+    one_hot: bool = False,
+    n_classes: int = 4,
+    exclude_missing_masks: bool = False,
+    pad_multiple: int = 16,
+):
+    self.root = Path(root)
+    self.augment = augment
+    self.metadata_index = metadata_index or {}
+    self.prefer_ed_es = prefer_ed_es
+    self.one_hot = one_hot
+    self.n_classes = int(n_classes)
+    self.exclude_missing_masks = exclude_missing_masks
+    self.pad_multiple = int(pad_multiple)
 
-        # Samples: list of tuples (patient_id, t, z, image_path, mask_path_or_None)
-        self.samples: List[Tuple[str, int, int, Path, Optional[Path]]] = []
-        self._build_samples()
+    # Build sample list (the old method that populates self.samples)
+    # If your class already does `self._build_samples()` keep that call.
+    self._build_samples()  # <-- existing method that currently fills self.samples
 
-        if len(self.samples) == 0:
-            raise RuntimeError(f"No slices found under {self.root}")
+    # --- Ensure we only keep labeled samples when requested ---
+    # At this point self.samples should be a list of tuples:
+    # (patient_id, t_idx, z_idx, image_path, mask_path_or_None)
+    if self.exclude_missing_masks:
+        original_len = len(self.samples)
+        # keep only entries where mask_path is not None and file exists
+        filtered = []
+        for s in self.samples:
+            _, _, _, _, mask_p = s
+            if mask_p is None:
+                continue
+            # also guard against stale paths on disk
+            if not Path(mask_p).exists():
+                continue
+            filtered.append(s)
 
-        # Precompute sample->patient mapping for fast sampler access
-        self._sample_to_patient = [s[0] for s in self.samples]
+        self.samples = filtered
+        filtered_len = len(self.samples)
+        print(f"[dataset] filtered unlabeled samples: {original_len} → {filtered_len}")
+    else:
+        # already populated; keep as-is
+        pass
 
-        # Compute global target size (H, W) based on metadata.json per patient (fast)
-        self.target_h, self.target_w = self._compute_global_target_size()
+    if len(self.samples) == 0:
+        raise RuntimeError(
+            "No samples available after filtering. "
+            "If you expected labeled samples, check preprocessed/ and mask_manifest.json"
+        )
+
+    # Compute global target size (remainder of __init__ unchanged)
+    self.target_h, self.target_w = self._compute_global_target_size()
+
 
     # -------------------------
     # Sample collection
@@ -320,11 +344,11 @@ class CardiacDataset(Dataset):
         # Load image (preprocessed floats expected)
         image = np.load(image_path).astype(np.float32)
 
-        # Load mask or create explicit zero mask
+        # Mask must exist because dataset was constructed with exclude_missing_masks=True
         if mask_path is None:
-            mask = np.zeros_like(image, dtype=np.uint8)
-        else:
-            mask = np.load(mask_path).astype(np.uint8)
+            raise RuntimeError(f"Missing mask for sample {image_path}. Dataset should have filtered unlabeled samples.")
+        mask = np.load(mask_path).astype(np.uint8)
+
 
         # Apply augmentations (albumentations expects HxW arrays)
         if self.augment is not None:
@@ -348,23 +372,10 @@ class CardiacDataset(Dataset):
             cval=0,
         )
 
-        # Defensive shape check and fix (should not happen often)
+        # Mask shape check
         if image_padded.shape != mask_padded.shape:
-            # Try simple transpose fix for mask
-            try:
-                if mask_padded.T.shape == image_padded.shape:
-                    mask_padded = mask_padded.T
-                else:
-                    # center-crop/pad mask to match image
-                    mh, mw = mask_padded.shape
-                    ih, iw = image_padded.shape
-                    new_mask = np.zeros((ih, iw), dtype=np.uint8)
-                    ch = min(mh, ih)
-                    cw = min(mw, iw)
-                    new_mask[:ch, :cw] = mask_padded[:ch, :cw]
-                    mask_padded = new_mask
-            except Exception:
-                mask_padded = np.zeros_like(image_padded, dtype=np.uint8)
+            raise RuntimeError(f"Image/mask shape mismatch after padding for sample {image_path}: image {image_padded.shape}, mask {mask_padded.shape}")
+
 
         # Convert mask to desired format
         if self.one_hot:
@@ -377,17 +388,10 @@ class CardiacDataset(Dataset):
         # Convert image to tensor with channel-first and float32
         image_tensor = torch.from_numpy(np.expand_dims(image_padded.astype(np.float32), axis=0)).float()  # (1, H, W)
 
-        # Final sanity assertion (helps catch silent bugs early)
+        # Final sanity assertion 
         if mask_tensor.shape[1:] != image_tensor.shape[1:]:
-            # If mismatch persists, fix by resizing mask to image shape (last resort)
-            ih, iw = image_tensor.shape[1], image_tensor.shape[2]
-            if mask_tensor.dim() == 3:
-                mt = mask_tensor.squeeze(0).numpy()
-                new_mask = pad_to_target_2d(mt, ih, iw, mode="constant", cval=0)
-                mask_tensor = torch.from_numpy(new_mask.astype(np.int64)).long().unsqueeze(0)
-            else:
-                # fallback zero mask
-                mask_tensor = torch.zeros((1, image_tensor.shape[1], image_tensor.shape[2]), dtype=torch.long)
+            raise RuntimeError(f"Final image/mask shape mismatch for sample {image_path}: image {image_tensor.shape}, mask {mask_tensor.shape}")
+
 
         return image_tensor, mask_tensor
 

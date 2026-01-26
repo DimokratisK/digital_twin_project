@@ -9,3 +9,58 @@ Train samples: 1492 Val samples: 5200
 Config summary: {'batch_size': 4, 'lr': 0.001, 'max_epochs': 1, 'sampler_type': 'none', 'use_labeled_only': True}
 Epoch 000 finished in 5951.3s  train_loss=0.4904  val_loss=0.7974
 Training finished. Best val loss: 0.7974341969192028
+
+
+-------------------------------------------------------------------
+
+
+[dataloaders] dataset sizes: train_samples= 20151  val_samples= 5200
+[dataloaders] train batch 0: labeled_in_batch=4/4
+[dataloaders] train batch 1: labeled_in_batch=4/4
+[dataloaders] train batch 2: labeled_in_batch=4/4
+[dataloaders] val batch 0: labeled_in_batch=3/4
+[dataloaders] val batch 1: labeled_in_batch=4/4
+C:\Users\dimok\VSCodeProjects\digital_twin_project\twin_core\utils\training_pipeline.py:128: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler() if (use_amp and device.type == "cuda") else None
+Training start. Device: cuda
+Train samples: 1492 Val samples: 5200
+Config summary: {'batch_size': 4, 'lr': 0.001, 'max_epochs': 75, 'sampler_type': 'none', 'use_labeled_only': True}
+Train epoch 0:   0%|                                                       | 0/373 [00:00<?, ?it/s]C:\Users\dimok\VSCodeProjects\digital_twin_project\twin_core\utils\training_pipeline.py:186: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast():
+Epoch 000 finished in 411.6s  train_loss=0.5615  val_loss=0.8040
+Epoch 001 finished in 375.6s  train_loss=0.2521  val_loss=0.8475
+Epoch 002 finished in 375.9s  train_loss=0.1818  val_loss=0.8555
+Epoch 003 finished in 375.5s  train_loss=0.1517  val_loss=0.9041
+Epoch 004 finished in 374.5s  train_loss=0.1271  val_loss=1.0158
+Epoch 005 finished in 375.2s  train_loss=0.1115  val_loss=0.9660
+Epoch 006 finished in 374.5s  train_loss=0.1079  val_loss=0.8974
+Epoch 007 finished in 374.2s  train_loss=0.0856  val_loss=0.9711
+Epoch 008 finished in 375.0s  train_loss=0.0787  val_loss=1.0501
+Epoch 009 finished in 375.3s  train_loss=0.0763  val_loss=1.0187
+Epoch 010 finished in 375.0s  train_loss=0.0736  val_loss=1.0222
+Epoch 011 finished in 374.6s  train_loss=0.0769  val_loss=1.0365
+Epoch 012 finished in 374.4s  train_loss=0.0684  val_loss=0.9716
+Epoch 013 finished in 374.7s  train_loss=0.0620  val_loss=1.0054
+Epoch 014 finished in 374.9s  train_loss=0.0590  val_loss=1.0098
+Epoch 015 finished in 375.6s  train_loss=0.0588  val_loss=0.9660
+Epoch 016 finished in 375.2s  train_loss=0.0575  val_loss=1.0021
+Epoch 017 finished in 376.1s  train_loss=0.0568  val_loss=1.0083
+Epoch 018 finished in 380.2s  train_loss=0.0550  val_loss=0.9769
+Epoch 019 finished in 378.7s  train_loss=0.0510  val_loss=1.0160
+Epoch 020 finished in 376.7s  train_loss=0.0499  val_loss=1.0089
+Epoch 021 finished in 376.5s  train_loss=0.0488  val_loss=0.9950
+Epoch 022 finished in 379.4s  train_loss=0.0489  val_loss=1.0065
+Epoch 023 finished in 380.4s  train_loss=0.0483  val_loss=0.9854
+Epoch 024 finished in 375.4s  train_loss=0.0500  val_loss=0.9841
+Epoch 025 finished in 374.2s  train_loss=0.0469  val_loss=0.9820
+Epoch 026 finished in 374.5s  train_loss=0.0459  val_loss=0.9635
+Epoch 027 finished in 374.7s  train_loss=0.0450  val_loss=0.9810
+Epoch 028 finished in 375.5s  train_loss=0.0453  val_loss=0.9770
+Epoch 029 finished in 375.1s  train_loss=0.0436  val_loss=0.9768
+Epoch 030 finished in 375.9s  train_loss=0.0441  val_loss=0.9877
+Epoch 031 finished in 374.8s  train_loss=0.0426  val_loss=0.9693
+Epoch 032 finished in 375.6s  train_loss=0.0421  val_loss=0.9703
+Epoch 033 finished in 374.6s  train_loss=0.0423  val_loss=0.9341
+Epoch 034 finished in 374.5s  train_loss=0.0425  val_loss=0.9730
+Epoch 035 finished in 374.0s  train_loss=0.0421  val_loss=0.9782
+Train epoch 36:  18%|█▋       | 69/373 [00:33<02:26,  2.08it/s, loss=0.0412, ce=0.0032, dice=0.038][signal] saved checkpoint to checkpoints\ckpt_epoch036_signal.pt

@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 """
-Refactored training pipeline (supervised) with AMP and robust checkpointing.
+Refactored training pipeline (supervised) that uses labeled patients by default.
 
-Features:
-- Uses dataloader factory `get_dataloaders(cfg)` to build train/val loaders.
-- Defaults to labeled-only split when available.
-- Uses repository UNet implementation (utils/UNET_model.py).
-- AMP (automatic mixed precision) support via cfg["use_amp"].
-- Reduced GPU<->CPU syncs by accumulating metrics on device and flushing every `log_every`.
-- Safe checkpointing: periodic saves, signal/interrupt handler, optional resume.
-- Stable pipeline interface: build(cfg) -> state, train_epoch(state,epoch), validate(state,epoch), save(state,path), load(path,device).
+- Uses the dataloader factory `get_dataloaders(cfg)` to build train/val loaders.
+- Defaults to the labeled-only split (split_manifest_labeled.json) when available.
+- Uses the repository UNet implementation (utils/UNET_model.py).
+- Stable pipeline interface: build(cfg) -> state, train_epoch(state,cfg), validate(state,cfg), save(state,path), load(path,device).
+- Checkpoints include model/optim/epoch/cfg to allow future semi-supervised extensions.
 """
 from pathlib import Path
 import json
 import time
-import signal
-import sys
 from typing import Dict, Any, Optional
 
 import torch
@@ -23,10 +18,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from twin_core.data_ingestion.dataloaders import get_dataloaders
 from twin_core.utils.UNET_model import UNet
+# Dataset wrapper (metadata helpers)
 from twin_core.data_ingestion.dataset_wrapper import CardiacDatasetWithMeta
+
 
 
 # -------------------------
@@ -58,26 +54,21 @@ def build(cfg: Dict[str, Any]) -> Dict[str, Any]:
     Build model, optimizer, scheduler, dataloaders and initial state.
     Returns a state dict consumed by train_epoch and validate.
     """
-    # Device
     device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
-
-    # Optional cuDNN tuning
-    if cfg.get("cudnn_benchmark", False):
-        torch.backends.cudnn.benchmark = True
-
-    # Data
     data_root = Path(cfg.get("data_root", "preprocessed"))
     manifest_path = cfg.get("manifest_path", str(data_root / "mask_manifest.json"))
 
+    # Prefer labeled split by default (Option 1)
     split_manifest_path = cfg.get("split_manifest_path", str(data_root / "split_manifest_labeled.json"))
     if not Path(split_manifest_path).exists():
         split_manifest_path = str(data_root / "split_manifest.json")
 
+    # Build dataloaders via factory
     dl_cfg = {
         "data_root": data_root,
         "manifest_path": manifest_path,
         "split_manifest_path": split_manifest_path,
-        "use_labeled_only": cfg.get("use_labeled_only", True),
+        "use_labeled_only": True,
         "sampler_type": cfg.get("sampler_type", "none"),
         "labeled_weight": cfg.get("labeled_weight", 5.0),
         "batch_size": cfg.get("batch_size", 4),
@@ -88,8 +79,6 @@ def build(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "one_hot": cfg.get("one_hot", False),
         "n_classes": cfg.get("n_classes", 4),
         "pad_multiple": cfg.get("pad_multiple", 16),
-        "pin_memory": cfg.get("pin_memory", False),
-        "exclude_missing_masks": cfg.get("exclude_missing_masks", False),
     }
 
     dataloaders = get_dataloaders(dl_cfg)
@@ -102,7 +91,7 @@ def build(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if cfg.get("require_val_labels", True) and len(val_loader.dataset) == 0:
         raise RuntimeError("Validation dataset is empty (no labeled samples). Check split_manifest_labeled.json and mask_manifest.json.")
 
-    # Model
+    # Model: use repository UNet
     in_ch = int(cfg.get("in_channels", 1))
     n_classes = int(cfg.get("n_classes", 4))
     base_features = int(cfg.get("base_features", 64))
@@ -157,21 +146,11 @@ def train_epoch(state: Dict[str, Any], epoch: int) -> Dict[str, Any]:
     total_ce = 0.0
     total_dice = 0.0
     n_batches = 0
-
-    log_every = int(state["cfg"].get("log_every", 10))
-    sync_for_logging = bool(state["cfg"].get("sync_for_logging", False))
-
+    log_every = 10
     ce_loss_fn = nn.CrossEntropyLoss()
-
-    # Running accumulators on device to avoid per-iteration syncs
     running_loss = torch.tensor(0.0, device=device)
     running_ce = torch.tensor(0.0, device=device)
     running_dice = torch.tensor(0.0, device=device)
-    batches_in_block = 0
-
-    use_amp = state.get("use_amp", False) and device.type == "cuda"
-    scaler = state.get("scaler", None)
-
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Train epoch {epoch}", leave=False)
 
     for i, batch in pbar:
@@ -179,11 +158,10 @@ def train_epoch(state: Dict[str, Any], epoch: int) -> Dict[str, Any]:
         imgs = imgs.to(device, dtype=torch.float32, non_blocking=False)
         masks = masks.to(device, dtype=torch.long).squeeze(1)
 
-        # Zero grads (use set_to_none for slight perf improvement)
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()
 
-        # Forward / backward / step with optional AMP
-        if use_amp:
+        if state.get("use_amp", False) and device.type == "cuda":
+            scaler = state.get("scaler")
             with torch.cuda.amp.autocast():
                 logits = model(imgs)
                 ce = ce_loss_fn(logits, masks)
@@ -200,38 +178,25 @@ def train_epoch(state: Dict[str, Any], epoch: int) -> Dict[str, Any]:
             loss.backward()
             optimizer.step()
 
-        # Accumulate metrics on device
         running_loss += loss.detach()
         running_ce += ce.detach()
         running_dice += dice.detach()
-        batches_in_block += 1
 
-        # Flush metrics and update progress every log_every or at epoch end
-        is_last = (i + 1) == len(train_loader)
-        if batches_in_block >= log_every or is_last:
-            block_size = batches_in_block
-            if sync_for_logging and device.type == "cuda":
+        if (i + 1) % log_every == 0 or (i + 1) == len(train_loader):
+            if device.type == "cuda":
                 torch.cuda.synchronize()
-            # Compute averages for the block
-            avg_loss = float(running_loss.item()) / block_size
-            avg_ce = float(running_ce.item()) / block_size
-            avg_dice = float(running_dice.item()) / block_size
-
-            total_loss += avg_loss * block_size
-            total_ce += avg_ce * block_size
-            total_dice += avg_dice * block_size
-            n_batches += block_size
-
-            # Reset running accumulators
+            avg_loss = float(running_loss.item()) / log_every
+            avg_ce = float(running_ce.item()) / log_every
+            avg_dice = float(running_dice.item()) / log_every
+            total_loss += avg_loss * log_every
+            total_ce += avg_ce * log_every
+            total_dice += avg_dice * log_every
+            n_batches += log_every
             running_loss = torch.tensor(0.0, device=device)
             running_ce = torch.tensor(0.0, device=device)
             running_dice = torch.tensor(0.0, device=device)
-            batches_in_block = 0
-
-            # Update progress bar (only when we flush)
             pbar.set_postfix({"loss": total_loss / n_batches, "ce": total_ce / n_batches, "dice": total_dice / max(1, n_batches)})
 
-    # Final averages
     avg_loss = total_loss / max(1, n_batches)
     avg_ce = total_ce / max(1, n_batches)
     avg_dice = total_dice / max(1, n_batches)
@@ -337,8 +302,9 @@ def load(path: str, device: Optional[torch.device] = None) -> Dict[str, Any]:
 def train(cfg: Dict[str, Any]) -> None:
     """
     High-level training entrypoint. Builds state, runs epochs, saves checkpoints.
-    Supports optional resume via cfg["resume_from"].
     """
+    import signal
+    import sys
     state = build(cfg)
     model = state["model"]
     optimizer = state["optimizer"]
@@ -348,21 +314,6 @@ def train(cfg: Dict[str, Any]) -> None:
     ckpt_dir = Path(cfg.get("ckpt_dir", "checkpoints"))
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     ckpt_interval = int(cfg.get("ckpt_interval", 1))
-
-    # Optional resume
-    resume_path = cfg.get("resume_from", None)
-    if resume_path:
-        ckpt = load(resume_path, device=device)
-        model.load_state_dict(ckpt["model_state"])
-        optimizer.load_state_dict(ckpt["optimizer_state"])
-        state["start_epoch"] = int(ckpt.get("epoch", 0)) + 1
-        state["best_val_loss"] = ckpt.get("best_val_loss", float("inf"))
-        if "scaler_state" in ckpt and state.get("scaler") is not None:
-            try:
-                state["scaler"].load_state_dict(ckpt["scaler_state"])
-            except Exception:
-                pass
-        print(f"[resume] loaded checkpoint {resume_path}, starting at epoch {state['start_epoch']}", flush=True)
 
     # initial diagnostics
     print("Training start. Device:", device)
@@ -384,7 +335,6 @@ def train(cfg: Dict[str, Any]) -> None:
         signal.signal(signal.SIGTERM, _save_on_signal)
         signal.signal(signal.SIGINT, _save_on_signal)
     except Exception:
-        # Some environments may not allow signal registration; ignore if so
         pass
 
     try:
@@ -418,7 +368,7 @@ def train(cfg: Dict[str, Any]) -> None:
 # -------------------------
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Train segmentation model (supervised, AMP-enabled, checkpointing)")
+    parser = argparse.ArgumentParser(description="Train segmentation model (supervised, labeled-only split by default)")
     parser.add_argument("--config", type=str, default=None, help="Path to JSON config file (optional). If omitted, defaults are used.")
     args = parser.parse_args()
 
@@ -432,7 +382,6 @@ if __name__ == "__main__":
         "labeled_weight": 5.0,
         "batch_size": 4,
         "num_workers": 4,
-        "pin_memory": False,
         "lr": 1e-3,
         "max_epochs": 50,
         "ckpt_dir": "checkpoints",
@@ -446,15 +395,6 @@ if __name__ == "__main__":
         "dice_weight": 1.0,
         "require_val_labels": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
-        # AMP and logging options
-        "use_amp": True,
-        "log_every": 10,
-        "sync_for_logging": False,
-        "cudnn_benchmark": False,
-        # Optional resume path (set in JSON or CLI)
-        "resume_from": None,
-        # Exclude samples with missing masks
-        "exclude_missing_masks": False,
     }
 
     if args.config:
