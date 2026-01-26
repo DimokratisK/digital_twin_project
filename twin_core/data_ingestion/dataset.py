@@ -101,63 +101,76 @@ class CardiacDataset(Dataset):
     - Exposes helpers for samplers and metadata inspection.
     """
 
+    def __init__(
+        self,
+        root: Path,
+        augment: Optional[A.Compose] = None,
+        prefer_ed_es: bool = False,
+        metadata_index: Optional[Dict[str, dict]] = None,
+        one_hot: bool = False,
+        n_classes: int = 4,
+        exclude_missing_masks: bool = False,
+        pad_multiple: int = 16,
+    ):
+        self.root = Path(root)
+        self.augment = augment
+        self.metadata_index = metadata_index or {}
+        self.prefer_ed_es = prefer_ed_es
+        self.one_hot = one_hot
+        self.n_classes = int(n_classes)
+        self.exclude_missing_masks = exclude_missing_masks
+        self.pad_multiple = int(pad_multiple)
+
+        # Build sample list (the old method that populates self.samples)
+        self.samples: List[Tuple[str, int, int, Path, Optional[Path]]] = []
+        self._build_samples()  # <-- existing method that currently fills self.samples
+
+        # --- Ensure we only keep labeled samples when requested ---
+        # At this point self.samples should be a list of tuples:
+        # (patient_id, t_idx, z_idx, image_path, mask_path_or_None)
         
-def __init__(
-    self,
-    root: Path,
-    augment: Optional[A.Compose] = None,
-    prefer_ed_es: bool = False,
-    metadata_index: Optional[Dict[str, dict]] = None,
-    one_hot: bool = False,
-    n_classes: int = 4,
-    exclude_missing_masks: bool = False,
-    pad_multiple: int = 16,
-):
-    self.root = Path(root)
-    self.augment = augment
-    self.metadata_index = metadata_index or {}
-    self.prefer_ed_es = prefer_ed_es
-    self.one_hot = one_hot
-    self.n_classes = int(n_classes)
-    self.exclude_missing_masks = exclude_missing_masks
-    self.pad_multiple = int(pad_multiple)
+        if self.exclude_missing_masks:
+            original_len = len(self.samples)
 
-    # Build sample list (the old method that populates self.samples)
-    # If your class already does `self._build_samples()` keep that call.
-    self._build_samples()  # <-- existing method that currently fills self.samples
+            # Option A (robust, correct): load each mask once and keep only those with any foreground
+            filtered: List[Tuple[str, int, int, Path, Optional[Path]]] = []
+            for s in self.samples:
+                pid, t_idx, z_idx, img_p, mask_p = s
+                if mask_p is None:
+                    continue
+                mask_path = Path(mask_p)
+                if not mask_path.exists():
+                    continue
+                try:
+                    arr = np.load(mask_path)
+                    # keep only masks that contain at least one nonzero (foreground) pixel
+                    if np.any(arr != 0):
+                        filtered.append(s)
+                except Exception:
+                    # if loading fails, skip this sample (avoid silent zero-mask fallbacks)
+                    continue
 
-    # --- Ensure we only keep labeled samples when requested ---
-    # At this point self.samples should be a list of tuples:
-    # (patient_id, t_idx, z_idx, image_path, mask_path_or_None)
-    if self.exclude_missing_masks:
-        original_len = len(self.samples)
-        # keep only entries where mask_path is not None and file exists
-        filtered = []
-        for s in self.samples:
-            _, _, _, _, mask_p = s
-            if mask_p is None:
-                continue
-            # also guard against stale paths on disk
-            if not Path(mask_p).exists():
-                continue
-            filtered.append(s)
+            self.samples = filtered
+            filtered_len = len(self.samples)
+            print(f"[dataset] filtered unlabeled/empty masks: {original_len} → {filtered_len}")
 
-        self.samples = filtered
-        filtered_len = len(self.samples)
-        print(f"[dataset] filtered unlabeled samples: {original_len} → {filtered_len}")
-    else:
-        # already populated; keep as-is
-        pass
+        else:
+            # do nothing; keep the originally discovered list
+            pass
 
-    if len(self.samples) == 0:
-        raise RuntimeError(
-            "No samples available after filtering. "
-            "If you expected labeled samples, check preprocessed/ and mask_manifest.json"
-        )
+        # rebuild sample->patient mapping used by samplers
+        self._sample_to_patient = [s[0] for s in self.samples]
 
-    # Compute global target size (remainder of __init__ unchanged)
-    self.target_h, self.target_w = self._compute_global_target_size()
 
+
+        if len(self.samples) == 0:
+            raise RuntimeError(
+                "No samples available after filtering. "
+                "If you expected labeled samples, check preprocessed/ and mask_manifest.json"
+            )
+
+        # Compute global target size (remainder of __init__ unchanged)
+        self.target_h, self.target_w = self._compute_global_target_size()
 
     # -------------------------
     # Sample collection
@@ -317,8 +330,23 @@ def __init__(
     def samples_for_patient(self, patient_id: str) -> List[int]:
         return [i for i, s in enumerate(self.samples) if s[0] == patient_id]
 
-    def has_mask(self, idx: int) -> bool:
-        return self.samples[idx][4] is not None
+    def has_mask(self, idx: int, check_nonzero: bool = False) -> bool:
+        mask_path = self.samples[idx][4]
+        if mask_path is None:
+            return False
+
+        if not check_nonzero:
+            return True
+
+    # check_nonzero=True → verify mask actually contains labeled pixels
+        try:
+            import numpy as np
+            arr = np.load(mask_path)
+            return np.any(arr != 0)
+        except Exception:
+            return False
+    
+    
 
     def get_sample_meta(self, idx: int) -> Dict[str, Any]:
         pid, t_idx, z_idx, img_path, mask_path = self.samples[idx]

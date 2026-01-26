@@ -6,6 +6,8 @@ python -m twin_core.utils.preprocessing_pipeline `
 python -m twin_core.utils.training_pipeline `
   --config "twin_core/configs/smoke_train_config.json"
 
+python -m twin_core.checking.debug_tests.training_pipeline_debug --config twin_core/configs/smoke_train_config.json
+
 
 
 python -m twin_core.utils.cycle_geometries_extraction_pipeline `

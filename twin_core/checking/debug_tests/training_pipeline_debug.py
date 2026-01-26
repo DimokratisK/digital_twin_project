@@ -1,38 +1,51 @@
 #!/usr/bin/env python3
 """
-Refactored training pipeline (supervised) that uses labeled patients by default.
+training_pipeline_debug.py
 
-- Uses the dataloader factory `get_dataloaders(cfg)` to build train/val loaders.
-- Defaults to the labeled-only split (split_manifest_labeled.json) when available.
-- Uses the repository UNet implementation (utils/UNET_model.py).
-- Stable pipeline interface: build(cfg) -> state, train_epoch(state,cfg), validate(state,cfg), save(state,path), load(path,device).
-- Checkpoints include model/optim/epoch/cfg to allow future semi-supervised extensions.
+Disposable debug training script that attempts to overfit a single batch.
+
+Purpose:
+- Quickly verify model, dataloader, loss, and optimizer are wired correctly.
+- Fail fast and print informative messages.
+- No checkpointing, no validation, minimal external dependencies.
+
+Behavior:
+- Build dataloaders via get_dataloaders(dl_cfg) when possible, otherwise create a fallback DataLoader.
+- Grab one training batch and repeatedly run gradient updates on that batch.
+- Prints loss / CE / Dice every `print_every` iterations.
 """
 from pathlib import Path
 import json
 import time
-from typing import Dict, Any, Optional
+import sys
+from typing import Dict, Any
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from tqdm import tqdm
-from twin_core.data_ingestion.dataloaders import get_dataloaders
+
+# Try to import project utilities; fall back gracefully if something changed
+try:
+    from twin_core.data_ingestion.dataloaders import get_dataloaders
+except Exception:
+    get_dataloaders = None
+
+try:
+    from twin_core.data_ingestion.dataset import CardiacDataset
+except Exception:
+    CardiacDataset = None
+
 from twin_core.utils.UNET_model import UNet
-# Dataset wrapper (metadata helpers)
-from twin_core.data_ingestion.dataset_wrapper import CardiacDatasetWithMeta
-
-
 
 # -------------------------
-# Loss helpers
+# Utility losses
 # -------------------------
 def dice_loss_logits(pred_logits: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
-    Compute mean (1 - Dice) across classes from logits.
+    Mean (1 - Dice) across classes computed from logits.
     pred_logits: (B, C, H, W)
-    target: (B, 1, H, W) integer labels or (B, H, W)
+    target: (B, H, W) integer labels
     """
     if target.dim() == 4:
         target = target.squeeze(1)
@@ -47,361 +60,195 @@ def dice_loss_logits(pred_logits: torch.Tensor, target: torch.Tensor, eps: float
 
 
 # -------------------------
-# Pipeline interface
+# Build dataloaders (robust)
 # -------------------------
-def build(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Build model, optimizer, scheduler, dataloaders and initial state.
-    Returns a state dict consumed by train_epoch and validate.
-    """
-    device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
+def build_dataloaders(cfg: Dict[str, Any]):
     data_root = Path(cfg.get("data_root", "preprocessed"))
     manifest_path = cfg.get("manifest_path", str(data_root / "mask_manifest.json"))
-
-    # Prefer labeled split by default (Option 1)
     split_manifest_path = cfg.get("split_manifest_path", str(data_root / "split_manifest_labeled.json"))
     if not Path(split_manifest_path).exists():
         split_manifest_path = str(data_root / "split_manifest.json")
 
-    # Build dataloaders via factory
     dl_cfg = {
-        "data_root": data_root,
+        "data_root": str(data_root),
         "manifest_path": manifest_path,
         "split_manifest_path": split_manifest_path,
-        "use_labeled_only": True,
+        "use_labeled_only": cfg.get("use_labeled_only", True),
         "sampler_type": cfg.get("sampler_type", "none"),
-        "labeled_weight": cfg.get("labeled_weight", 5.0),
-        "batch_size": cfg.get("batch_size", 4),
-        "num_workers": cfg.get("num_workers", 4),
-        "use_manifest_for_label_filter": cfg.get("use_manifest_for_label_filter", True),
-        "val_use_labeled_only": cfg.get("val_use_labeled_only", True),
+        "batch_size": int(cfg.get("batch_size", 4)),
+        "num_workers": int(cfg.get("num_workers", 0)),
         "prefer_ed_es": cfg.get("prefer_ed_es", False),
         "one_hot": cfg.get("one_hot", False),
-        "n_classes": cfg.get("n_classes", 4),
-        "pad_multiple": cfg.get("pad_multiple", 16),
+        "n_classes": int(cfg.get("n_classes", 4)),
+        "pad_multiple": int(cfg.get("pad_multiple", 16)),
+        "pin_memory": bool(cfg.get("pin_memory", False)),
+        "exclude_missing_masks": bool(cfg.get("exclude_missing_masks", False)),
     }
 
-    dataloaders = get_dataloaders(dl_cfg)
-    train_loader: DataLoader = dataloaders["train"]
-    val_loader: DataLoader = dataloaders["val"]
+    # Attempt main factory first
+    if get_dataloaders is not None:
+        try:
+            dls = get_dataloaders(dl_cfg)
+            print("[debug] get_dataloaders succeeded")
+            return dls
+        except Exception as e:
+            print(f"[debug] get_dataloaders failed: {e}; will fall back to CardiacDataset + DataLoader")
 
-    # Fail-fast checks
-    if len(train_loader.dataset) == 0:
-        raise RuntimeError("Train dataset is empty. Check split_manifest_labeled.json and mask_manifest.json.")
-    if cfg.get("require_val_labels", True) and len(val_loader.dataset) == 0:
-        raise RuntimeError("Validation dataset is empty (no labeled samples). Check split_manifest_labeled.json and mask_manifest.json.")
+    # Fallback: create simple CardiacDataset and DataLoader
+    if CardiacDataset is None:
+        raise RuntimeError("Neither get_dataloaders nor CardiacDataset are importable. Cannot build dataloaders.")
 
-    # Model: use repository UNet
+    train_root = Path(data_root) / "train"
+    val_root = Path(data_root) / "val"
+
+    train_ds = CardiacDataset(train_root,
+                              augment=None,
+                              prefer_ed_es=cfg.get("prefer_ed_es", False),
+                              metadata_index=None,
+                              one_hot=cfg.get("one_hot", False),
+                              n_classes=cfg.get("n_classes", 4),
+                              exclude_missing_masks=cfg.get("exclude_missing_masks", True),
+                              pad_multiple=cfg.get("pad_multiple", 16))
+
+    val_ds = CardiacDataset(val_root,
+                            augment=None,
+                            prefer_ed_es=False,
+                            metadata_index=None,
+                            one_hot=cfg.get("one_hot", False),
+                            n_classes=cfg.get("n_classes", 4),
+                            exclude_missing_masks=cfg.get("exclude_missing_masks", True),
+                            pad_multiple=cfg.get("pad_multiple", 16))
+
+    train_loader = DataLoader(train_ds, batch_size=dl_cfg["batch_size"], shuffle=True, num_workers=dl_cfg["num_workers"], pin_memory=dl_cfg["pin_memory"])
+    val_loader = DataLoader(val_ds, batch_size=dl_cfg["batch_size"], shuffle=False, num_workers=dl_cfg["num_workers"], pin_memory=dl_cfg["pin_memory"])
+
+    return {"train": train_loader, "val": val_loader}
+
+
+# -------------------------
+# Overfit single batch loop
+# -------------------------
+def overfit_one_batch(cfg: Dict[str, Any]):
+    device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
+    torch.manual_seed(int(cfg.get("seed", 42)))
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(int(cfg.get("seed", 42)))
+
+    dls = build_dataloaders(cfg)
+    train_loader: DataLoader = dls["train"]
+    if len(train_loader) == 0:
+        raise RuntimeError("Train loader is empty; nothing to debug.")
+
+    # Grab one batch
+    batch = None
+    for b in train_loader:
+        batch = b
+        break
+    if batch is None:
+        raise RuntimeError("Failed to fetch a batch from train loader.")
+
+    imgs, masks = batch
+    # Masks expected shape (B,1,H,W) or (B,H,W)
+    if masks.dim() == 4 and masks.shape[1] == 1:
+        masks = masks.squeeze(1)
+    imgs = imgs.to(device, dtype=torch.float32)
+    masks = masks.to(device, dtype=torch.long)
+
+    print(f"[debug] using one batch with images {imgs.shape} masks {masks.shape} on device {device}")
+
+    # Build model
     in_ch = int(cfg.get("in_channels", 1))
     n_classes = int(cfg.get("n_classes", 4))
     base_features = int(cfg.get("base_features", 64))
-    use_bn = bool(cfg.get("use_bn", True))
-    dropout = cfg.get("dropout", None)
-
-    model = UNet(
-        in_channels=in_ch,
-        out_channels=n_classes,
-        base_features=base_features,
-        use_bn=use_bn,
-        dropout=dropout,
-    )
+    model = UNet(in_channels=in_ch, out_channels=n_classes, base_features=base_features)
     model = model.to(device)
 
-    # Optimizer and scheduler
+    # Optimizer & losses
     lr = float(cfg.get("lr", 1e-3))
-    weight_decay = float(cfg.get("weight_decay", 0.0))
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5) if cfg.get("use_plateau_scheduler", True) else None
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    ce_fn = nn.CrossEntropyLoss()
+    use_dice = bool(cfg.get("use_dice_loss", True))
+    dice_w = float(cfg.get("dice_weight", 1.0))
 
-    # AMP support
-    use_amp = bool(cfg.get("use_amp", False))
+    # AMP optional (disabled by default for debug)
+    use_amp = bool(cfg.get("use_amp", False)) and device.type == "cuda"
     scaler = torch.cuda.amp.GradScaler() if (use_amp and device.type == "cuda") else None
 
-    state = {
-        "cfg": cfg,
-        "device": device,
-        "model": model,
-        "optimizer": optimizer,
-        "scheduler": scheduler,
-        "dataloaders": dataloaders,
-        "start_epoch": 0,
-        "best_val_loss": float("inf"),
-        "use_amp": use_amp,
-        "scaler": scaler,
-    }
-    return state
-
-
-def train_epoch(state: Dict[str, Any], epoch: int) -> Dict[str, Any]:
-    """
-    Run one training epoch. Returns updated state with metrics.
-    """
-    model: nn.Module = state["model"]
-    optimizer: optim.Optimizer = state["optimizer"]
-    device = state["device"]
-    train_loader: DataLoader = state["dataloaders"]["train"]
+    # Overfit loop params
+    num_iters = int(cfg.get("debug_iters", 200))
+    print_every = int(cfg.get("debug_print_every", 10))
 
     model.train()
-    total_loss = 0.0
-    total_ce = 0.0
-    total_dice = 0.0
-    n_batches = 0
-    log_every = 10
-    ce_loss_fn = nn.CrossEntropyLoss()
-    running_loss = torch.tensor(0.0, device=device)
-    running_ce = torch.tensor(0.0, device=device)
-    running_dice = torch.tensor(0.0, device=device)
-    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Train epoch {epoch}", leave=False)
+    losses = []
+    t0 = time.time()
+    for it in range(1, num_iters + 1):
+        optimizer.zero_grad(set_to_none=True)
 
-    for i, batch in pbar:
-        imgs, masks = batch
-        imgs = imgs.to(device, dtype=torch.float32, non_blocking=False)
-        masks = masks.to(device, dtype=torch.long).squeeze(1)
-
-        optimizer.zero_grad()
-
-        if state.get("use_amp", False) and device.type == "cuda":
-            scaler = state.get("scaler")
+        if use_amp:
             with torch.cuda.amp.autocast():
                 logits = model(imgs)
-                ce = ce_loss_fn(logits, masks)
-                dice = dice_loss_logits(logits, masks) if state["cfg"].get("use_dice_loss", True) else torch.tensor(0.0, device=device)
-                loss = ce + float(state["cfg"].get("dice_weight", 1.0)) * dice
+                ce = ce_fn(logits, masks)
+                dice = dice_loss_logits(logits, masks) if use_dice else torch.tensor(0.0, device=device)
+                loss = ce + dice_w * dice
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
         else:
             logits = model(imgs)
-            ce = ce_loss_fn(logits, masks)
-            dice = dice_loss_logits(logits, masks) if state["cfg"].get("use_dice_loss", True) else torch.tensor(0.0, device=device)
-            loss = ce + float(state["cfg"].get("dice_weight", 1.0)) * dice
+            ce = ce_fn(logits, masks)
+            dice = dice_loss_logits(logits, masks) if use_dice else torch.tensor(0.0, device=device)
+            loss = ce + dice_w * dice
             loss.backward()
             optimizer.step()
 
-        running_loss += loss.detach()
-        running_ce += ce.detach()
-        running_dice += dice.detach()
+        losses.append(float(loss.item()))
 
-        if (i + 1) % log_every == 0 or (i + 1) == len(train_loader):
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-            avg_loss = float(running_loss.item()) / log_every
-            avg_ce = float(running_ce.item()) / log_every
-            avg_dice = float(running_dice.item()) / log_every
-            total_loss += avg_loss * log_every
-            total_ce += avg_ce * log_every
-            total_dice += avg_dice * log_every
-            n_batches += log_every
-            running_loss = torch.tensor(0.0, device=device)
-            running_ce = torch.tensor(0.0, device=device)
-            running_dice = torch.tensor(0.0, device=device)
-            pbar.set_postfix({"loss": total_loss / n_batches, "ce": total_ce / n_batches, "dice": total_dice / max(1, n_batches)})
+        if it % print_every == 0 or it == 1:
+            elapsed = time.time() - t0
+            avg = sum(losses[-print_every:]) / min(len(losses), print_every)
+            print(f"[iter {it:04d}/{num_iters}] loss={loss.item():.6f}  ce={float(ce.item()):.6f}  dice={float(dice.item() if isinstance(dice, torch.Tensor) else dice):.6f}  avg_last={avg:.6f}  elapsed={elapsed:.1f}s")
 
-    avg_loss = total_loss / max(1, n_batches)
-    avg_ce = total_ce / max(1, n_batches)
-    avg_dice = total_dice / max(1, n_batches)
-
-    state["last_train_loss"] = avg_loss
-    state["last_train_ce"] = avg_ce
-    state["last_train_dice"] = avg_dice
-    return state
-
-
-def validate(state: Dict[str, Any], epoch: int) -> Dict[str, Any]:
-    """
-    Run validation over labeled validation set. Returns updated state with validation metrics.
-    """
-    model: nn.Module = state["model"]
-    device = state["device"]
-    val_loader: DataLoader = state["dataloaders"]["val"]
-
-    model.eval()
-    total_loss = 0.0
-    total_ce = 0.0
-    total_dice = 0.0
-    n_batches = 0
-    ce_loss_fn = nn.CrossEntropyLoss()
-
-    with torch.no_grad():
-        pbar = tqdm(enumerate(val_loader), total=len(val_loader), desc=f"Validate epoch {epoch}", leave=False)
-        for i, batch in pbar:
-            imgs, masks = batch
-            imgs = imgs.to(device, dtype=torch.float32)
-            masks = masks.to(device, dtype=torch.long).squeeze(1)
-
-            logits = model(imgs)
-            ce = ce_loss_fn(logits, masks)
-            dice = dice_loss_logits(logits, masks) if state["cfg"].get("use_dice_loss", True) else torch.tensor(0.0, device=device)
-            loss = ce + float(state["cfg"].get("dice_weight", 1.0)) * dice
-
-            total_loss += float(loss.item())
-            total_ce += float(ce.item())
-            total_dice += float(dice.item()) if isinstance(dice, torch.Tensor) else float(dice)
-            n_batches += 1
-
-            pbar.set_postfix({"val_loss": total_loss / n_batches})
-
-    avg_loss = total_loss / max(1, n_batches)
-    avg_ce = total_ce / max(1, n_batches)
-    avg_dice = total_dice / max(1, n_batches)
-
-    state["last_val_loss"] = avg_loss
-    state["last_val_ce"] = avg_ce
-    state["last_val_dice"] = avg_dice
-
-    # Scheduler step if using ReduceLROnPlateau
-    if state.get("scheduler") is not None:
-        try:
-            state["scheduler"].step(avg_loss)
-        except Exception:
-            pass
-
-    # Track best
-    if avg_loss < state.get("best_val_loss", float("inf")):
-        state["best_val_loss"] = avg_loss
-        state["best_epoch"] = epoch
-        state["is_best"] = True
-    else:
-        state["is_best"] = False
-
-    return state
-
-
-def save(state: Dict[str, Any], path: str) -> None:
-    """
-    Save checkpoint. Includes model/optimizer/epoch/cfg and best metric.
-    """
-    ckpt = {
-        "model_state": state["model"].state_dict(),
-        "optimizer_state": state["optimizer"].state_dict(),
-        "epoch": state.get("epoch", 0),
-        "best_val_loss": state.get("best_val_loss", float("inf")),
-        "cfg": state.get("cfg", {}),
-    }
-    scaler = state.get("scaler", None)
-    if scaler is not None:
-        try:
-            ckpt["scaler_state"] = scaler.state_dict()
-        except Exception:
-            pass
-    torch.save(ckpt, path)
-
-
-def load(path: str, device: Optional[torch.device] = None) -> Dict[str, Any]:
-    """
-    Load checkpoint and return dict with keys matching save().
-    """
-    map_location = device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
-    ckpt = torch.load(path, map_location=map_location)
-    return ckpt
+    print("[debug] finished overfit run. Loss history (last 10):", losses[-10:])
+    return {"losses": losses, "model": model}
 
 
 # -------------------------
-# High-level train loop entrypoint
-# -------------------------
-def train(cfg: Dict[str, Any]) -> None:
-    """
-    High-level training entrypoint. Builds state, runs epochs, saves checkpoints.
-    """
-    import signal
-    import sys
-    state = build(cfg)
-    model = state["model"]
-    optimizer = state["optimizer"]
-    device = state["device"]
-
-    max_epochs = int(cfg.get("max_epochs", 100))
-    ckpt_dir = Path(cfg.get("ckpt_dir", "checkpoints"))
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_interval = int(cfg.get("ckpt_interval", 1))
-
-    # initial diagnostics
-    print("Training start. Device:", device)
-    print("Train samples:", len(state["dataloaders"]["train"].dataset), "Val samples:", len(state["dataloaders"]["val"].dataset))
-    print("Config summary:", {k: cfg[k] for k in sorted(cfg) if k in ("batch_size", "lr", "max_epochs", "use_labeled_only", "sampler_type")})
-
-    # Register signal handler to save checkpoint on termination
-    def _save_on_signal(signum, frame):
-        try:
-            ckpt_path = ckpt_dir / f"ckpt_epoch{state.get('epoch', 0):03d}_signal.pt"
-            save(state, str(ckpt_path))
-            print(f"[signal] saved checkpoint to {ckpt_path}", flush=True)
-        except Exception as e:
-            print(f"[signal] failed to save checkpoint: {e}", flush=True)
-        finally:
-            sys.exit(0)
-
-    try:
-        signal.signal(signal.SIGTERM, _save_on_signal)
-        signal.signal(signal.SIGINT, _save_on_signal)
-    except Exception:
-        pass
-
-    try:
-        for epoch in range(state.get("start_epoch", 0), max_epochs):
-            state["epoch"] = epoch
-            t0 = time.time()
-            state = train_epoch(state, epoch)
-            state = validate(state, epoch)
-
-            # Save checkpoint every ckpt_interval epochs and when best
-            if (epoch + 1) % ckpt_interval == 0:
-                ckpt_path = ckpt_dir / f"ckpt_epoch{epoch:03d}.pt"
-                save(state, str(ckpt_path))
-            if state.get("is_best", False):
-                best_path = ckpt_dir / "ckpt_best.pt"
-                save(state, str(best_path))
-
-            t1 = time.time()
-            print(f"Epoch {epoch:03d} finished in {t1 - t0:.1f}s  train_loss={state.get('last_train_loss'):.4f}  val_loss={state.get('last_val_loss'):.4f}")
-    except KeyboardInterrupt:
-        ckpt_path = ckpt_dir / f"ckpt_epoch{state.get('epoch', 0):03d}_interrupt.pt"
-        save(state, str(ckpt_path))
-        print(f"[interrupt] saved checkpoint to {ckpt_path}", flush=True)
-        raise
-
-    print("Training finished. Best val loss:", state.get("best_val_loss"))
-
-
-# -------------------------
-# CLI entrypoint for quick runs
+# CLI
 # -------------------------
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Train segmentation model (supervised, labeled-only split by default)")
-    parser.add_argument("--config", type=str, default=None, help="Path to JSON config file (optional). If omitted, defaults are used.")
+    parser = argparse.ArgumentParser(description="Debug training: overfit one batch to validate pipeline")
+    parser.add_argument("--config", type=str, default=None, help="Path to config JSON (optional).")
     args = parser.parse_args()
 
-    # Default config (can be overridden by JSON file)
-    cfg: Dict[str, Any] = {
+    # defaults tuned for fast debug
+    cfg = {
         "data_root": "preprocessed",
         "manifest_path": "preprocessed/mask_manifest.json",
         "split_manifest_path": "preprocessed/split_manifest_labeled.json",
         "use_labeled_only": True,
-        "sampler_type": "none",
-        "labeled_weight": 5.0,
         "batch_size": 4,
-        "num_workers": 4,
+        "num_workers": 0,
         "lr": 1e-3,
-        "max_epochs": 50,
-        "ckpt_dir": "checkpoints",
-        "ckpt_interval": 1,
         "n_classes": 4,
         "in_channels": 1,
         "base_features": 64,
-        "use_bn": True,
-        "dropout": None,
+        "use_amp": False,
         "use_dice_loss": True,
         "dice_weight": 1.0,
-        "require_val_labels": True,
+        "debug_iters": 200,
+        "debug_print_every": 10,
+        "exclude_missing_masks": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "seed": 42,
     }
 
     if args.config:
         cfg_path = Path(args.config)
         if not cfg_path.exists():
             raise RuntimeError(f"Config file not found: {cfg_path}")
-        cfg_from_file = json.load(open(cfg_path, "r", encoding="utf-8"))
-        cfg.update(cfg_from_file)
+        cfg.update(json.load(open(cfg_path, "r", encoding="utf-8")))
 
-    train(cfg)
+    print("[debug] config:", {k: cfg[k] for k in sorted(cfg) if k in ("data_root", "batch_size", "debug_iters", "use_amp", "device", "n_classes")})
+    out = overfit_one_batch(cfg)
+    print("[debug] done.")
