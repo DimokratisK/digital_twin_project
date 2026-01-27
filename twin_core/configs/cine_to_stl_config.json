@@ -1,0 +1,10 @@
+{
+  "dataset_root": "c:\\Users\\dimok\\Downloads\\PhD\\Digital Twin\\Data\\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\\Resources\\database",
+  "nifti": "c:\\Users\\dimok\\Downloads\\PhD\\Digital Twin\\Data\\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\\Resources\\database\\training\\patient002\\patient002_4d.nii.gz",
+  "weights": "checkpoints/ckpt_best.pt",
+  "run_name": "cine_to_stl_run",
+  "device": null,
+  "labels_to_export": {"RV": 1, "MYO": 2, "LV": 3},
+  "export_combined": false,
+  "batch_slices": null
+}

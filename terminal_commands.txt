@@ -15,12 +15,19 @@ python -m twin_core.utils.cycle_geometries_extraction_pipeline `
   --checkpoint "epoch12-val0.1234.pth"
 
 
-python -m twin_core.utils.cine_to_stl_pipeline `
-  --dataset_root "C:\Users\dimok\path\to\my_dataset" `
-  --nifti "C:\Users\dimok\path\to\patient001_4d.nii.gz" `
-  --weights "epoch12-val0.1345.ckpt" `
-  --run_name test_run
+python -m twin_core.utils.cine_to_stl_pipeline --config twin_core/configs/cine_to_stl_config.json
 
+python -m twin_core.utils.cine_to_stl_pipeline `
+  --dataset_root "c:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database" `
+  --nifti "c:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient002\patient002_4d.nii.gz" `
+  --weights "checkpoints/ckpt_best.pt"
+
+
+python -m twin_core.utils.animate_stl_sequence `
+  --label_dir "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\meshes\cine_to_stl_run_270126_1443\patient002\LV" `
+  --out "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\meshes\cine_to_stl_run_270126_1443\patient002\LVLV_animation.mp4" `
+  --framerate 10 `
+  --offscreen
 
 
 -----------------------------------------
