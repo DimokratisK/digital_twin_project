@@ -25,9 +25,20 @@ python -m twin_core.utils.cine_to_stl_pipeline `
 
 python -m twin_core.utils.animate_stl_sequence `
   --label_dir "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\meshes\cine_to_stl_run_270126_1443\patient002\LV" `
-  --out "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\meshes\cine_to_stl_run_270126_1443\patient002\LVLV_animation.mp4" `
+  --out "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\meshes\cine_to_stl_run_270126_1443\patient002\LV_animation.mp4" `
   --framerate 10 `
   --offscreen
+
+
+python -m twin_core.utils.single_slice_inference `
+  --checkpoint "checkpoints/ckpt_best.pt" `
+  --nifti "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame01.nii.gz" `
+  --t 0 --z 4 `
+  --out_dir "outputs/inference" `
+  --device cpu
+
+
+
 
 
 -----------------------------------------

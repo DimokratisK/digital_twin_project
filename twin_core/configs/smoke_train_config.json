@@ -2,15 +2,45 @@
   "data_root": "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/preprocessed",
   "manifest_path": "preprocessed/mask_manifest.json",
   "split_manifest_path": "preprocessed/split_manifest_labeled.json",
+
   "batch_size": 4,
   "num_workers": 2,
+  "pin_memory": false,
+
   "max_epochs": 75,
   "lr": 0.001,
+  "weight_decay": 0.0,
+
   "n_classes": 4,
   "in_channels": 1,
   "base_features": 64,
+  "use_bn": true,
+  "dropout": null,
+
+  "use_dice_loss": true,
+  "dice_weight": 1.0,
+
+  "use_labeled_only": true,
+  "require_val_labels": true,
+  "exclude_missing_masks": true,
+
+  "sampler_type": "none",
+  "labeled_weight": 5.0,
+
   "use_amp": true,
+  "use_plateau_scheduler": true,
+
+  "log_every": 10,
   "sync_for_logging": false,
+
   "cudnn_benchmark": true,
-  "exclude_missing_masks": true
+
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 1,
+  "resume_from": null,
+
+  "device": "cuda",
+
+  "class_names": ["BG", "RV", "MYO", "LV"],
+  "exclude_background_from_dice": true
 }
