@@ -2,11 +2,26 @@ python -m twin_core.utils.preprocessing_pipeline `
   --dataset_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database" `
   --crop 8
 
+------------------------
+python -m twin_core.utils.bimodal_preprocessing_pipeline `
+  --dataset_root "C:/.../merged_dataset_150" `
+  --crop 8 `
+  --train_ratio 0.8
+
+or
+
+python -m twin_core.utils.bimodal_preprocessing_pipeline `
+  --dataset_root "C:/.../ACDC_root" `
+  --train_input "C:/.../ACDC_root/training" `
+  --test_input  "C:/.../ACDC_root/testing" `
+  --crop 8
+
+-------------------------
 
 python -m twin_core.utils.training_pipeline `
   --config "twin_core/configs/smoke_train_config.json"
 
-python -m twin_core.checking.debug_tests.training_pipeline_debug --config twin_core/configs/smoke_train_config.json
+python -m twin_core.debug.training_pipeline_debug --config twin_core/configs/smoke_train_config.json
 
 
 
@@ -30,15 +45,26 @@ python -m twin_core.utils.animate_stl_sequence `
   --offscreen
 
 
+python -m twin_core.debug.inspect_mask_tz "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame12_gt.nii.gz"
+
+
+
+
 python -m twin_core.utils.single_slice_inference `
   --checkpoint "checkpoints/ckpt_best.pt" `
-  --nifti "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame01.nii.gz" `
-  --t 0 --z 4 `
+  --nifti "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_4d.nii.gz" `
+  --t 11 --z 5 `
   --out_dir "outputs/inference" `
   --device cpu
 
 
 
+python -m twin_core.debug.overlay_image_and_mask `
+  --image "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame12.nii.gz" `
+  --mask "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame12_gt.nii.gz" `
+  --z 5 `
+  --out outputs/overlay_flipped_t11_z5_fixed_colour.png `
+  --flip180
 
 
 -----------------------------------------
