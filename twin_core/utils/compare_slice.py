@@ -32,7 +32,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
-# Local imports from your repo
+# Local imports 
 from twin_core.utils.inference_dataset import InferenceDataset
 from twin_core.utils.segmentation_model import load_model
 

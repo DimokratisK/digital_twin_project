@@ -1,5 +1,5 @@
 {
-  "data_root": "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/preprocessed",
+  "data_root": "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/merged_dataset_150/preprocessed",
   "manifest_path": "preprocessed/mask_manifest.json",
   "split_manifest_path": "preprocessed/split_manifest_labeled.json",
 

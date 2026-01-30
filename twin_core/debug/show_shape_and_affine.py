@@ -4,8 +4,8 @@ import numpy as np
 from pathlib import Path
 
 
-# Define the directory where your NIfTI file is located
-# Replace 'path/to/your/data/folder' with the actual path
+# Define the directory where the NIfTI file is located
+# Replace 'path/to/the/data/folder' with the actual path
 data_dir = Path("c:/Users/dimok/Downloads/PhD/Udemy_courses/Deep_Learning_for_medical_imaging/AI-IN-MEDICAL-MATERIALS_NEW/AI-IN-MEDICAL-MATERIALS/03-Data-Formats/03-Preprocessing/IXI662-Guys-1120-T1.nii.gz") 
 file_path = data_dir
 

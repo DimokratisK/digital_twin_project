@@ -123,7 +123,6 @@ Epoch 006 finished in 204.6s  train_loss=0.1002  val_loss=0.1937
 Epoch 007 finished in 204.7s  train_loss=0.0945  val_loss=0.1551
 Epoch 008 finished in 216.8s  train_loss=0.0932  val_loss=0.2121
 Epoch 009 finished in 205.2s  train_loss=0.0925  val_loss=0.1257
-███| 373/373 [02:59<00:00,  2.07it/s, loss=0.0833, ce=0.00692, dice                                                                                                                                            
 Epoch 010 finished in 203.6s  train_loss=0.0833  val_loss=0.1550
 Epoch 011 finished in 204.7s  train_loss=0.0833  val_loss=0.1512
 Epoch 012 finished in 208.8s  train_loss=0.0808  val_loss=0.1404
@@ -190,3 +189,96 @@ Epoch 072 finished in 203.9s  train_loss=0.0314  val_loss=0.1168
 Epoch 073 finished in 203.9s  train_loss=0.0312  val_loss=0.1165
 Epoch 074 finished in 204.0s  train_loss=0.0318  val_loss=0.1168
 Training finished. Best val loss: 0.1088136878203262
+
+---------------------------------------------------------------
+290126
+
+[dataset] filtered unlabeled/empty masks: 30447 → 2267
+[dataset] filtered unlabeled/empty masks: 7899 → 575
+[dataloaders] dataset sizes: train_samples= 2267  val_samples= 575
+[dataloaders] train batch 0: labeled_in_batch=4/4
+[dataloaders] train batch 1: labeled_in_batch=4/4
+[dataloaders] train batch 2: labeled_in_batch=4/4
+[dataloaders] val batch 0: labeled_in_batch=4/4
+[dataloaders] val batch 1: labeled_in_batch=4/4
+C:\Users\dimok\VSCodeProjects\digital_twin_project\twin_core\utils\training_pipeline.py:172: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler() if (use_amp and device.type == "cuda") else None
+Training start. Device: cuda
+Train samples: 2267 Val samples: 575
+Config summary: {'batch_size': 4, 'lr': 0.001, 'max_epochs': 75, 'sampler_type': 'none', 'use_labeled_only': True}
+Epoch 000 finished in 375.1s  train_loss=0.6000 train_ce=0.065911 train_dice_loss=0.649680 train_dice=0.3503  val_loss=0.7095 val_ce=0.146775 val_dice_loss=0.527266 val_dice=0.4727
+Epoch 001 finished in 309.2s  train_loss=0.3030 train_ce=0.024601 train_dice_loss=0.269997 train_dice=0.7300  val_loss=0.6801 val_ce=0.141736 val_dice_loss=0.467428 val_dice=0.5326
+Epoch 002 finished in 309.5s  train_loss=0.2195 train_ce=0.017424 train_dice_loss=0.192384 train_dice=0.8076  val_loss=0.3286 val_ce=0.062991 val_dice_loss=0.222871 val_dice=0.7771
+Epoch 003 finished in 309.2s  train_loss=0.1839 train_ce=0.013893 train_dice_loss=0.159865 train_dice=0.8401  val_loss=0.3116 val_ce=0.057780 val_dice_loss=0.204138 val_dice=0.7959
+Epoch 004 finished in 309.9s  train_loss=0.1618 train_ce=0.012589 train_dice_loss=0.142254 train_dice=0.8577  val_loss=0.2947 val_ce=0.047313 val_dice_loss=0.178656 val_dice=0.8213
+Epoch 005 finished in 310.0s  train_loss=0.1406 train_ce=0.010397 train_dice_loss=0.122366 train_dice=0.8776  val_loss=0.2049 val_ce=0.034541 val_dice_loss=0.124789 val_dice=0.8752
+Epoch 006 finished in 309.9s  train_loss=0.1231 train_ce=0.008929 train_dice_loss=0.106280 train_dice=0.8937  val_loss=0.2354 val_ce=0.039142 val_dice_loss=0.148842 val_dice=0.8512
+Epoch 007 finished in 310.1s  train_loss=0.1233 train_ce=0.008989 train_dice_loss=0.106820 train_dice=0.8932  val_loss=0.1929 val_ce=0.032569 val_dice_loss=0.117492 val_dice=0.8825
+Epoch 008 finished in 309.9s  train_loss=0.1141 train_ce=0.008068 train_dice_loss=0.098410 train_dice=0.9016  val_loss=0.1872 val_ce=0.028599 val_dice_loss=0.111309 val_dice=0.8887
+Epoch 009 finished in 309.2s  train_loss=0.1082 train_ce=0.007706 train_dice_loss=0.093100 train_dice=0.9069  val_loss=0.1905 val_ce=0.030511 val_dice_loss=0.114620 val_dice=0.8854
+Epoch 010 finished in 309.9s  train_loss=0.1072 train_ce=0.007572 train_dice_loss=0.092793 train_dice=0.9072  val_loss=0.1602 val_ce=0.024472 val_dice_loss=0.098274 val_dice=0.9017
+Epoch 011 finished in 309.2s  train_loss=0.1024 train_ce=0.007065 train_dice_loss=0.087438 train_dice=0.9126  val_loss=0.1759 val_ce=0.027107 val_dice_loss=0.105729 val_dice=0.8943
+Epoch 012 finished in 309.1s  train_loss=0.0939 train_ce=0.006492 train_dice_loss=0.081260 train_dice=0.9187  val_loss=0.2411 val_ce=0.046350 val_dice_loss=0.168069 val_dice=0.8319
+Epoch 013 finished in 309.2s  train_loss=0.0954 train_ce=0.006651 train_dice_loss=0.082014 train_dice=0.9180  val_loss=0.1760 val_ce=0.031038 val_dice_loss=0.105467 val_dice=0.8945
+Epoch 014 finished in 309.6s  train_loss=0.0972 train_ce=0.007006 train_dice_loss=0.083930 train_dice=0.9161  val_loss=0.1687 val_ce=0.028882 val_dice_loss=0.099020 val_dice=0.9010
+Epoch 015 finished in 309.5s  train_loss=0.0880 train_ce=0.006080 train_dice_loss=0.076414 train_dice=0.9236  val_loss=0.2001 val_ce=0.035831 val_dice_loss=0.126915 val_dice=0.8731
+Epoch 016 finished in 309.9s  train_loss=0.0894 train_ce=0.005928 train_dice_loss=0.076126 train_dice=0.9239  val_loss=0.1868 val_ce=0.031259 val_dice_loss=0.119350 val_dice=0.8806
+Epoch 017 finished in 309.9s  train_loss=0.0777 train_ce=0.005024 train_dice_loss=0.067531 train_dice=0.9325  val_loss=0.1484 val_ce=0.023705 val_dice_loss=0.089122 val_dice=0.9109
+Epoch 018 finished in 310.1s  train_loss=0.0736 train_ce=0.004694 train_dice_loss=0.063675 train_dice=0.9363  val_loss=0.1416 val_ce=0.023151 val_dice_loss=0.085591 val_dice=0.9144
+Epoch 019 finished in 309.1s  train_loss=0.0707 train_ce=0.004546 train_dice_loss=0.062281 train_dice=0.9377  val_loss=0.1469 val_ce=0.023873 val_dice_loss=0.085382 val_dice=0.9146
+Epoch 020 finished in 309.6s  train_loss=0.0691 train_ce=0.004370 train_dice_loss=0.060679 train_dice=0.9393  val_loss=0.1354 val_ce=0.021134 val_dice_loss=0.081372 val_dice=0.9186
+Epoch 021 finished in 309.6s  train_loss=0.0728 train_ce=0.004695 train_dice_loss=0.063303 train_dice=0.9367  val_loss=0.1411 val_ce=0.022748 val_dice_loss=0.084300 val_dice=0.9157
+Epoch 022 finished in 309.1s  train_loss=0.0673 train_ce=0.004209 train_dice_loss=0.058874 train_dice=0.9411  val_loss=0.1438 val_ce=0.024053 val_dice_loss=0.085186 val_dice=0.9148
+Epoch 023 finished in 310.3s  train_loss=0.0674 train_ce=0.004198 train_dice_loss=0.059014 train_dice=0.9410  val_loss=0.1591 val_ce=0.027441 val_dice_loss=0.093954 val_dice=0.9060
+Epoch 024 finished in 309.5s  train_loss=0.0696 train_ce=0.004374 train_dice_loss=0.059802 train_dice=0.9402  val_loss=0.1496 val_ce=0.025786 val_dice_loss=0.086456 val_dice=0.9135
+Epoch 025 finished in 310.3s  train_loss=0.0660 train_ce=0.004109 train_dice_loss=0.057691 train_dice=0.9423  val_loss=0.1460 val_ce=0.025373 val_dice_loss=0.086071 val_dice=0.9139
+Epoch 026 finished in 309.6s  train_loss=0.0638 train_ce=0.003992 train_dice_loss=0.056295 train_dice=0.9437  val_loss=0.1313 val_ce=0.019714 val_dice_loss=0.079619 val_dice=0.9204
+Epoch 027 finished in 308.9s  train_loss=0.0659 train_ce=0.004099 train_dice_loss=0.056908 train_dice=0.9431  val_loss=0.1448 val_ce=0.023106 val_dice_loss=0.085978 val_dice=0.9140
+Epoch 028 finished in 308.7s  train_loss=0.0642 train_ce=0.003972 train_dice_loss=0.056146 train_dice=0.9439  val_loss=0.1387 val_ce=0.022094 val_dice_loss=0.082469 val_dice=0.9175
+Epoch 029 finished in 308.5s  train_loss=0.0617 train_ce=0.003766 train_dice_loss=0.053846 train_dice=0.9462  val_loss=0.1545 val_ce=0.027324 val_dice_loss=0.087670 val_dice=0.9123
+Epoch 030 finished in 308.5s  train_loss=0.0617 train_ce=0.003824 train_dice_loss=0.054205 train_dice=0.9458  val_loss=0.1406 val_ce=0.023009 val_dice_loss=0.082223 val_dice=0.9178
+Epoch 031 finished in 308.6s  train_loss=0.0632 train_ce=0.003911 train_dice_loss=0.055524 train_dice=0.9445  val_loss=0.1410 val_ce=0.024147 val_dice_loss=0.083750 val_dice=0.9162
+Epoch 032 finished in 310.8s  train_loss=0.0605 train_ce=0.003698 train_dice_loss=0.053123 train_dice=0.9469  val_loss=0.1376 val_ce=0.022954 val_dice_loss=0.082260 val_dice=0.9177
+Epoch 033 finished in 315.4s  train_loss=0.0561 train_ce=0.003403 train_dice_loss=0.049754 train_dice=0.9502  val_loss=0.1407 val_ce=0.024405 val_dice_loss=0.081333 val_dice=0.9187
+Epoch 034 finished in 308.6s  train_loss=0.0563 train_ce=0.003426 train_dice_loss=0.049418 train_dice=0.9506  val_loss=0.1364 val_ce=0.022775 val_dice_loss=0.080394 val_dice=0.9196
+Epoch 035 finished in 309.0s  train_loss=0.0546 train_ce=0.003269 train_dice_loss=0.048016 train_dice=0.9520  val_loss=0.1303 val_ce=0.021576 val_dice_loss=0.077287 val_dice=0.9227
+Epoch 036 finished in 310.2s  train_loss=0.0550 train_ce=0.003239 train_dice_loss=0.047321 train_dice=0.9527  val_loss=0.1278 val_ce=0.020933 val_dice_loss=0.076521 val_dice=0.9235
+Epoch 037 finished in 308.8s  train_loss=0.0538 train_ce=0.003186 train_dice_loss=0.046789 train_dice=0.9532  val_loss=0.1341 val_ce=0.023618 val_dice_loss=0.078515 val_dice=0.9215
+Epoch 038 finished in 309.2s  train_loss=0.0537 train_ce=0.003187 train_dice_loss=0.046691 train_dice=0.9533  val_loss=0.1361 val_ce=0.023045 val_dice_loss=0.080541 val_dice=0.9195
+Epoch 039 finished in 308.8s  train_loss=0.0521 train_ce=0.003137 train_dice_loss=0.046254 train_dice=0.9537  val_loss=0.1334 val_ce=0.023566 val_dice_loss=0.078547 val_dice=0.9215
+Epoch 040 finished in 313.0s  train_loss=0.0520 train_ce=0.003156 train_dice_loss=0.045927 train_dice=0.9541  val_loss=0.1275 val_ce=0.021365 val_dice_loss=0.075841 val_dice=0.9242
+Epoch 041 finished in 308.7s  train_loss=0.0510 train_ce=0.003076 train_dice_loss=0.045013 train_dice=0.9550  val_loss=0.1347 val_ce=0.024040 val_dice_loss=0.078869 val_dice=0.9211
+Epoch 042 finished in 309.2s  train_loss=0.0513 train_ce=0.003053 train_dice_loss=0.044694 train_dice=0.9553  val_loss=0.1384 val_ce=0.025515 val_dice_loss=0.080180 val_dice=0.9198
+Epoch 043 finished in 309.5s  train_loss=0.0509 train_ce=0.003101 train_dice_loss=0.045021 train_dice=0.9550  val_loss=0.1315 val_ce=0.023607 val_dice_loss=0.077910 val_dice=0.9221
+Epoch 044 finished in 309.5s  train_loss=0.0515 train_ce=0.003185 train_dice_loss=0.045582 train_dice=0.9544  val_loss=0.1313 val_ce=0.023005 val_dice_loss=0.077761 val_dice=0.9222
+Epoch 045 finished in 308.8s  train_loss=0.0495 train_ce=0.002984 train_dice_loss=0.043590 train_dice=0.9564  val_loss=0.1323 val_ce=0.023495 val_dice_loss=0.077949 val_dice=0.9221
+Epoch 046 finished in 309.5s  train_loss=0.0488 train_ce=0.002958 train_dice_loss=0.043229 train_dice=0.9568  val_loss=0.1299 val_ce=0.022943 val_dice_loss=0.077156 val_dice=0.9228
+Epoch 047 finished in 308.9s  train_loss=0.0472 train_ce=0.002829 train_dice_loss=0.041480 train_dice=0.9585  val_loss=0.1314 val_ce=0.024205 val_dice_loss=0.077486 val_dice=0.9225
+Epoch 048 finished in 308.8s  train_loss=0.0462 train_ce=0.002793 train_dice_loss=0.040768 train_dice=0.9592  val_loss=0.1337 val_ce=0.024551 val_dice_loss=0.078531 val_dice=0.9215
+Epoch 049 finished in 309.4s  train_loss=0.0465 train_ce=0.002780 train_dice_loss=0.040504 train_dice=0.9595  val_loss=0.1350 val_ce=0.025187 val_dice_loss=0.078701 val_dice=0.9213
+Epoch 050 finished in 316.2s  train_loss=0.0451 train_ce=0.002752 train_dice_loss=0.040079 train_dice=0.9599  val_loss=0.1320 val_ce=0.024412 val_dice_loss=0.077127 val_dice=0.9229
+Epoch 051 finished in 308.9s  train_loss=0.0451 train_ce=0.002759 train_dice_loss=0.039963 train_dice=0.9600  val_loss=0.1325 val_ce=0.024978 val_dice_loss=0.077002 val_dice=0.9230
+Epoch 052 finished in 309.4s  train_loss=0.0446 train_ce=0.002740 train_dice_loss=0.039562 train_dice=0.9604  val_loss=0.1361 val_ce=0.026358 val_dice_loss=0.079197 val_dice=0.9208
+Epoch 053 finished in 309.5s  train_loss=0.0434 train_ce=0.002673 train_dice_loss=0.038627 train_dice=0.9614  val_loss=0.1329 val_ce=0.025308 val_dice_loss=0.077170 val_dice=0.9228
+Epoch 054 finished in 311.1s  train_loss=0.0439 train_ce=0.002668 train_dice_loss=0.038246 train_dice=0.9618  val_loss=0.1342 val_ce=0.025710 val_dice_loss=0.077749 val_dice=0.9223
+Epoch 055 finished in 308.9s  train_loss=0.0429 train_ce=0.002648 train_dice_loss=0.037998 train_dice=0.9620  val_loss=0.1341 val_ce=0.025999 val_dice_loss=0.077531 val_dice=0.9225
+Epoch 056 finished in 309.1s  train_loss=0.0425 train_ce=0.002650 train_dice_loss=0.037871 train_dice=0.9621  val_loss=0.1331 val_ce=0.025407 val_dice_loss=0.077278 val_dice=0.9227
+Epoch 057 finished in 309.5s  train_loss=0.0426 train_ce=0.002631 train_dice_loss=0.037642 train_dice=0.9624  val_loss=0.1361 val_ce=0.026508 val_dice_loss=0.078061 val_dice=0.9219
+Epoch 058 finished in 309.8s  train_loss=0.0424 train_ce=0.002632 train_dice_loss=0.037395 train_dice=0.9626  val_loss=0.1352 val_ce=0.026677 val_dice_loss=0.077673 val_dice=0.9223
+Epoch 059 finished in 309.0s  train_loss=0.0418 train_ce=0.002604 train_dice_loss=0.036926 train_dice=0.9631  val_loss=0.1336 val_ce=0.026095 val_dice_loss=0.077151 val_dice=0.9228
+Epoch 060 finished in 311.7s  train_loss=0.0424 train_ce=0.002588 train_dice_loss=0.036799 train_dice=0.9632  val_loss=0.1324 val_ce=0.025714 val_dice_loss=0.076810 val_dice=0.9232
+Epoch 061 finished in 308.8s  train_loss=0.0416 train_ce=0.002604 train_dice_loss=0.036652 train_dice=0.9633  val_loss=0.1333 val_ce=0.026020 val_dice_loss=0.077188 val_dice=0.9228
+Epoch 062 finished in 308.9s  train_loss=0.0412 train_ce=0.002582 train_dice_loss=0.036484 train_dice=0.9635  val_loss=0.1349 val_ce=0.026768 val_dice_loss=0.077552 val_dice=0.9224
+Epoch 063 finished in 309.3s  train_loss=0.0411 train_ce=0.002585 train_dice_loss=0.036362 train_dice=0.9636  val_loss=0.1344 val_ce=0.026444 val_dice_loss=0.077485 val_dice=0.9225
+Epoch 064 finished in 309.4s  train_loss=0.0412 train_ce=0.002583 train_dice_loss=0.036323 train_dice=0.9637  val_loss=0.1347 val_ce=0.026797 val_dice_loss=0.077611 val_dice=0.9224
+Epoch 065 finished in 309.4s  train_loss=0.0408 train_ce=0.002569 train_dice_loss=0.036001 train_dice=0.9640  val_loss=0.1349 val_ce=0.027045 val_dice_loss=0.077822 val_dice=0.9222
+Epoch 066 finished in 309.5s  train_loss=0.0414 train_ce=0.002576 train_dice_loss=0.036022 train_dice=0.9640  val_loss=0.1359 val_ce=0.027259 val_dice_loss=0.077989 val_dice=0.9220
+Epoch 067 finished in 309.2s  train_loss=0.0405 train_ce=0.002564 train_dice_loss=0.035853 train_dice=0.9641  val_loss=0.1345 val_ce=0.026582 val_dice_loss=0.077699 val_dice=0.9223
+Epoch 068 finished in 309.4s  train_loss=0.0412 train_ce=0.002563 train_dice_loss=0.035861 train_dice=0.9641  val_loss=0.1364 val_ce=0.027579 val_dice_loss=0.078214 val_dice=0.9218
+Epoch 069 finished in 309.1s  train_loss=0.0406 train_ce=0.002571 train_dice_loss=0.035864 train_dice=0.9641  val_loss=0.1347 val_ce=0.026834 val_dice_loss=0.077723 val_dice=0.9223
+Epoch 070 finished in 309.6s  train_loss=0.0404 train_ce=0.002570 train_dice_loss=0.035762 train_dice=0.9642  val_loss=0.1355 val_ce=0.027419 val_dice_loss=0.077707 val_dice=0.9223
+Epoch 071 finished in 309.4s  train_loss=0.0401 train_ce=0.002555 train_dice_loss=0.035532 train_dice=0.9645  val_loss=0.1361 val_ce=0.027329 val_dice_loss=0.078095 val_dice=0.9219
+Epoch 072 finished in 310.2s  train_loss=0.0404 train_ce=0.002554 train_dice_loss=0.035570 train_dice=0.9644  val_loss=0.1349 val_ce=0.027042 val_dice_loss=0.077461 val_dice=0.9225
+Epoch 073 finished in 309.4s  train_loss=0.0402 train_ce=0.002552 train_dice_loss=0.035512 train_dice=0.9645  val_loss=0.1359 val_ce=0.027423 val_dice_loss=0.077793 val_dice=0.9222
+Epoch 074 finished in 309.7s  train_loss=0.0402 train_ce=0.002553 train_dice_loss=0.035450 train_dice=0.9645  val_loss=0.1353 val_ce=0.027306 val_dice_loss=0.077658 val_dice=0.9223
+Training finished. Best val loss: 0.12752744586517414

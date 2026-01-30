@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import sys
+import time
 
 # Default config (overridden by CLI)
 DEFAULT_CHECKPOINT = Path("checkpoints/ckpt_best.pt")
@@ -32,7 +33,7 @@ DEFAULT_PAD_MULTIPLE = 16
 DEFAULT_DEVICE = "cuda"
 DEFAULT_OUT_DIR = Path("outputs/inference")
 
-# Import model (must be importable in your environment)
+# Import model
 from twin_core.utils.UNET_model import UNet
 
 # Default human-readable class labels (index -> name)
@@ -42,6 +43,8 @@ CLASS_LABELS = {
     2: "MYO",
     3: "LV",
 }
+
+timestr = time.strftime("%Y%m%d-%H%M%S")
 
 # Default colors for classes (index -> rgba hex). Background set to fully transparent.
 # You can edit these to taste. They map index->color, so label values align to colors.
@@ -350,8 +353,8 @@ def main():
         pred = logits.argmax(dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
 
     pred_unpadded = unpad(pred, pad_info)
-    out_npy = OUT_DIR / f"pred_t{t}_z{z}.npy"
-    out_png = OUT_DIR / f"pred_t{t}_z{z}.png"
+    out_npy = OUT_DIR / f"pred_t{t}_z{z}_{timestr}.npy"
+    out_png = OUT_DIR / f"pred_t{t}_z{z}_{timestr}.png"
     np.save(str(out_npy), pred_unpadded)
 
     # Visualize using in-overlay legend and deterministic colors

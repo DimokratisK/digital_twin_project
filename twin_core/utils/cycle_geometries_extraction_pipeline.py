@@ -17,7 +17,6 @@ Assumptions:
 - `mask_to_mesh(label_or_binary_mask, spacing, out_path, class_id=None, **kwargs)` accepts either:
     - a binary mask (0/1) and no class_id, or
     - a labeled volume and a class_id to extract that class.
-  If your implementation differs, adapt the calls below accordingly.
 """
 
 from pathlib import Path

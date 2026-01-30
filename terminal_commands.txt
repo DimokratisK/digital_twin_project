@@ -49,22 +49,33 @@ python -m twin_core.debug.inspect_mask_tz "C:\Users\dimok\Downloads\PhD\Digital 
 
 
 
-
+### t = frameXX -1
 python -m twin_core.utils.single_slice_inference `
   --checkpoint "checkpoints/ckpt_best.pt" `
-  --nifti "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_4d.nii.gz" `
-  --t 11 --z 5 `
-  --out_dir "outputs/inference" `
-  --device cpu
+  --nifti "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\merged_dataset_150\training\patient009\patient009_4d.nii.gz" `
+  --t 12 --z 5 `
+  --out_dir "outputs/inference"
 
 
 
 python -m twin_core.debug.overlay_image_and_mask `
-  --image "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame12.nii.gz" `
-  --mask "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training\patient001\patient001_frame12_gt.nii.gz" `
+ --data_root "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/merged_dataset_150" `
+  --patient 9 --frame 13 `
+  --out_dir "outputs"
+
+
+
+python -m twin_core.utils.plot_confusions --inputs "C:\Users\dimok\VSCodeProjects\digital_twin_project\checkpoints\confusion_val_epoch040.npy" "C:\Users\dimok\VSCodeProjects\digital_twin_project\checkpoints\confusion_train_epoch040.npy"  --out_dir outputs/graphs --class-names BG,RV,MYO,LV --cmap viridis
+
+
+
+python -m twin_core.utils.merge_gt_and_pred `
+  --data_root "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/merged_dataset_150" `
+  --patient 4 --frame 15 `
+  --checkpoint "checkpoints/ckpt_best.pt" `
   --z 5 `
-  --out outputs/overlay_flipped_t11_z5_fixed_colour.png `
-  --flip180
+  --out_dir "outputs/merge" --device cuda
+  
 
 
 -----------------------------------------

@@ -8,7 +8,9 @@ Load an image (2D/3D/4D NIfTI) and a mask (2D/3D/4D NIfTI) and display/save an o
  - automatic selection of time/frame (t) and slice (z) if possible; user can override via CLI
 
 New:
+ - accepts --patient and --frame (auto-resolve image/mask paths under <data_root>/training/<patient>)
  - --flip180 flag rotates both image and mask 180 degrees before display/save.
+ - constructs output filename using patient id, t, z and timestamp.
 
 Deterministic color mapping:
  0: BG (transparent)
@@ -25,6 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm, to_rgba
 import matplotlib.patches as mpatches
 from typing import Optional, Tuple
+from datetime import datetime
 
 # Regex to parse frame index like "frame01" or "f01"
 _FRAME_RE = re.compile(r"(?:[_\-]|^)(?:frame|f)0*([0-9]+)", flags=re.IGNORECASE)
@@ -294,25 +297,81 @@ def overlay_and_plot(image: np.ndarray,
 
 
 # -------------------------
+# Helpers to format patient id and auto-resolve paths
+# -------------------------
+def format_patient_id(patient_arg) -> str:
+    """
+    Accepts integer or string like "1", "001", "patient1", "patient001" and returns 'patientXXX'
+    """
+    if patient_arg is None:
+        raise ValueError("patient_arg is None")
+    if isinstance(patient_arg, int):
+        return f"patient{int(patient_arg):03d}"
+    s = str(patient_arg).strip()
+    if s.lower().startswith("patient"):
+        # ensure patientNNN format
+        digits = s[len("patient"):].lstrip("0")
+        try:
+            n = int(digits) if digits != "" else 0
+        except Exception:
+            return s
+        return f"patient{n:03d}"
+    if s.isdigit():
+        return f"patient{int(s):03d}"
+    # fallback: return as-is
+    return s
+
+
+# -------------------------
 # CLI
 # -------------------------
 def main():
     parser = argparse.ArgumentParser(description="Overlay a GT mask on top of a cardiac image slice")
-    parser.add_argument("--image", required=True, help="Path to image NIfTI (2D/3D/4D)")
-    parser.add_argument("--mask", required=True, help="Path to mask NIfTI (2D/3D/4D)")
+    parser.add_argument("--image", type=str, default=None, help="Path to image NIfTI (2D/3D/4D). If omitted and --patient/--frame provided, auto-resolve from --data_root")
+    parser.add_argument("--mask", type=str, default=None, help="Path to mask NIfTI (2D/3D/4D). If omitted and --patient/--frame provided, auto-resolve from --data_root")
+    parser.add_argument("--data_root", type=str, default=None, help="Optional dataset root containing training/ (used with --patient)")
+    parser.add_argument("--patient", type=str, default=None, help="Patient identifier (e.g. '1', '001', 'patient001'). If provided will be used to auto-resolve image/mask when --image/--mask missing.")
+    parser.add_argument("--frame", type=int, default=None, help="Frame number as in filename (1-indexed). E.g. frame12 -> pass 12")
     parser.add_argument("--t", type=int, default=None, help="Time/frame index to display (0-indexed). If omitted, script will guess or use 0.")
     parser.add_argument("--z", type=int, default=None, help="Slice (z) index to display (0-indexed). If omitted, script will guess or use middle slice.")
-    parser.add_argument("--out", type=str, default=None, help="Path to save PNG (optional)")
+    parser.add_argument("--out", type=str, default=None, help="Explicit path to save PNG (optional). If provided, --out_dir/constructed name is ignored.")
+    parser.add_argument("--out_dir", type=str, default="outputs", help="Output directory used when --out not provided")
     parser.add_argument("--alpha", type=float, default=0.6, help="Overlay alpha for masks (0.0-1.0)")
     parser.add_argument("--outline", action="store_true", help="Overlay contour outlines for each label")
     parser.add_argument("--label-names", type=str, default=None, help="Comma-separated label names starting from index 0 (BG). Example: BG,RV,MYO,LV")
     parser.add_argument("--no-show", action="store_true", help="Don't show interactive window (useful for headless runs)")
-    parser.add_argument("--flip180", action="store_true", help="Rotate both image and mask by 180 degrees before plotting/saving")
+    parser.add_argument("--flip180", default=True, action="store_true", help="Rotate both image and mask by 180 degrees before plotting/saving")
     parser.add_argument("--num-classes", type=int, default=None, help="Force number of classes (makes legend show indices up to this value)")
     args = parser.parse_args()
 
-    image_path = Path(args.image)
-    mask_path = Path(args.mask)
+    # Priority: explicit --image/--mask. If missing, try to build from --patient + --frame (+ --data_root)
+    image_path = Path(args.image) if args.image else None
+    mask_path = Path(args.mask) if args.mask else None
+
+    if (image_path is None) or (mask_path is None):
+        if args.patient is not None and args.frame is not None:
+            # normalize patient to patientNNN
+            try:
+                # follow user's requested pid_for_name pattern when possible (int patient)
+                pid_for_name_try = f"patient{int(args.patient):03d}"
+            except Exception:
+                pid_for_name_try = format_patient_id(args.patient)
+
+            pid = pid_for_name_try
+            base = Path(args.data_root) if args.data_root else Path.cwd()
+            training_dir = base / "training"
+            patient_dir = training_dir / pid
+            if not patient_dir.exists():
+                patient_dir = base / pid
+            frame_idx = int(args.frame)
+            if image_path is None:
+                image_path = patient_dir / f"{pid}_frame{int(frame_idx):02d}.nii.gz"
+            if mask_path is None:
+                mask_path = patient_dir / f"{pid}_frame{int(frame_idx):02d}_gt.nii.gz"
+        else:
+            if image_path is None or mask_path is None:
+                raise RuntimeError("Either provide --image and --mask explicitly, or supply --patient and --frame (and optional --data_root) to auto-resolve paths.")
+
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
     if not mask_path.exists():
@@ -331,12 +390,49 @@ def main():
             mask_slice = np.rot90(mask_slice, 2)
         print("Applied 180-degree rotation to image and mask (flip180).")
 
+    # Build output filename
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # infer_t chosen and z
+    infer_t = int(chosen_t)
+    z = int(chosen_z)
+
+    # pid_for_name per your requested pattern if args.patient is simple int-like; otherwise fallback to image parent folder
+    if args.patient is not None:
+        try:
+            pid_for_name = f"patient{int(args.patient):03d}"
+        except Exception:
+            pid_for_name = format_patient_id(args.patient)
+    else:
+        pid_for_name = image_path.parent.name
+
+    timestr = datetime.now().strftime("%Y%m%dT%H%M%S")
+
+    # **Important change**: filename t must be (--frame - 1) when --frame provided.
+    if args.frame is not None:
+        try:
+            t_for_name = int(args.frame) - 1
+        except Exception:
+            t_for_name = infer_t
+    else:
+        t_for_name = infer_t
+
+    constructed_out = out_dir / f"overlay_{pid_for_name}_t{t_for_name}_z{z}_{timestr}.png"
+
+    # Respect explicit --out if provided
+    if args.out:
+        out_png = Path(args.out)
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_png = constructed_out
+
     overlay_and_plot(img_slice,
                      mask_slice,
                      label_names,
                      alpha=args.alpha,
                      outline=args.outline,
-                     save_path=Path(args.out) if args.out else None,
+                     save_path=out_png,
                      show=not args.no_show,
                      user_colors=CLASS_COLORS,
                      class_labels=CLASS_LABELS,
