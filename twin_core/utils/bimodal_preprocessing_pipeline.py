@@ -4,12 +4,18 @@ Refactored preprocessing pipeline for cine-like 4D cardiac NIfTI datasets.
 
 Improvements:
 - Robust axis/orientation handling via nibabel.as_closest_canonical
-- Streaming (per-slice) processing using nibabel.dataobj to avoid loading full 4D volumes
+- Streaming (per-slice) processing using nibabel.dataobj to avoid loading full 4D volumes where possible
 - Explicit out_root (--out_root); optional two-input pre-split mode (--train_input, --test_input)
 - Configurable normalization: --norm {none,zscore,minmax,double}
 - Configurable globbing for images and per-frame gt files
 - Dry-run mode, logging, metadata with pixdim+affine
 - Writes mask_manifest.json, split_manifest.json and split_manifest_labeled.json (if requested)
+
+Changes applied:
+- More robust per-frame mask handling: reliably reorder mask axes to (Z,Y,X) and pad/truncate
+  masks to fit the target image shape before assignment to avoid broadcasting errors.
+- Added a conservative --fix_headers flag which rebuilds the NIfTI header from data+affine
+  to avoid nibabel pixdim/qfac warnings and header inconsistencies (memory heavy).
 """
 from pathlib import Path
 import argparse
@@ -18,10 +24,11 @@ import random
 import re
 import logging
 import sys
+from typing import Dict, Optional, Tuple, List, Any
+
 import numpy as np
 import nibabel as nib
 from tqdm import tqdm
-from typing import Dict, Optional, Tuple, List, Any
 
 from .paths import dataset_paths, ensure_dir
 
@@ -40,6 +47,9 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("preproc")
+nib_logger = logging.getLogger("nibabel")
+# If you want to silence nibabel warnings, set:
+# nib_logger.setLevel(logging.ERROR)
 
 EPS = DEFAULT_EPS
 
@@ -143,6 +153,120 @@ def extract_slice_from_canonical(nii_c: nib.Nifti1Image, t_idx: int, z_idx: int)
 
 
 # -------------------------
+# Header-fix helper (new)
+# -------------------------
+def _rebuild_nifti_header_safe(nii: nib.Nifti1Image) -> nib.Nifti1Image:
+    """
+    Conservative header fix: rebuild a new Nifti1Image from the image data and affine.
+    This removes suspicious header fields (including a bad pixdim[0]/qfac) by letting nibabel
+    create a fresh header. This loads the image data into memory once for the patient.
+    Returns the new image; on failure returns the original image.
+    """
+    try:
+        # load data (may be memory heavy for 4D images)
+        data = np.asarray(nii.get_fdata())
+        affine = nii.affine if hasattr(nii, "affine") else np.eye(4)
+        new_nii = nib.Nifti1Image(data, affine)
+        # attempt to preserve units if available
+        try:
+            old_hdr = nii.header
+            new_hdr = new_nii.header
+            try:
+                units = old_hdr.get_xyzt_units()
+                if units is not None:
+                    new_hdr.set_xyzt_units(*units)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return new_nii
+    except Exception as e:
+        logger.warning("Header rebuild failed: %s — continuing with original image", e)
+        return nii
+
+
+# -------------------------
+# Mask helpers: convert any loaded mask array -> (Z, Y, X) and pad/truncate safely
+# -------------------------
+def mask_to_zyx(arr: np.ndarray) -> np.ndarray:
+    """
+    Convert a mask array from nibabel into a canonical (Z, Y, X) 3D numpy array.
+    Accepts common input shapes:
+      - (X, Y)          -> returns (1, Y, X)
+      - (X, Y, Z)       -> returns (Z, Y, X)
+      - (X, Y, Z, T)    -> returns (Z, Y, X) taking T=0 (most masks are single-frame)
+      - (1, Z, Y, X)    -> returns (Z, Y, X)
+      - (Z, Y, X)       -> returns unchanged
+    Heuristics are conservative to avoid mis-ordering.
+    """
+    if arr is None:
+        raise ValueError("mask_to_zyx received None")
+
+    a = np.asarray(arr)
+    nd = a.ndim
+
+    # 2D mask -> (1, Y, X)
+    if nd == 2:
+        return a[None, :, :].astype(np.uint8)
+
+    # 3D: ambiguous (Z,Y,X) or (X,Y,Z). Use heuristics:
+    if nd == 3:
+        z, y, x = a.shape
+        # If first dim is small (<= 20) it's likely Z; else if last dim is small, treat accordingly.
+        if z <= 20 and x > 20:
+            # likely already (Z, Y, X)
+            return a.astype(np.uint8)
+        # if first dim is large and last dim small -> assume (X,Y,Z) and transpose
+        if x <= 20 and z > 20:
+            return np.transpose(a, (2, 1, 0)).astype(np.uint8)
+        # fallback: if last dim looks like X (large) assume (Z,Y,X) already
+        if x > 20:
+            return a.astype(np.uint8)
+        # otherwise try transpose to (Z,Y,X)
+        return np.transpose(a, (2, 1, 0)).astype(np.uint8)
+
+    # 4D: try to extract meaningful 3D block
+    if nd == 4:
+        # if shape looks like (1, Z, Y, X) -> remove leading singleton
+        if a.shape[0] == 1:
+            b = a[0]
+            if b.ndim == 3:
+                return b.astype(np.uint8)
+        # otherwise assume (X, Y, Z, T) -> take first timepoint -> (X,Y,Z)
+        try:
+            b = a[..., 0]  # (X, Y, Z) or similar
+            return np.transpose(b, (2, 1, 0)).astype(np.uint8)
+        except Exception:
+            pass
+
+    # Fallback: squeeze and try again
+    a_s = np.squeeze(a)
+    if a_s.ndim == 3:
+        return mask_to_zyx(a_s)
+    if a_s.ndim == 2:
+        return a_s[None, :, :].astype(np.uint8)
+
+    logger.warning("mask_to_zyx: unexpected mask shape %s, returning minimal zeros (1,1,1)", a.shape)
+    return np.zeros((1, 1, 1), dtype=np.uint8)
+
+
+def fit_or_pad_to_shape(src: np.ndarray, target_shape: Tuple[int, int, int]) -> np.ndarray:
+    """
+    Return a new array with shape == target_shape by copying the overlapping region of src
+    and zero-padding where src is smaller. Left-align copy in each axis.
+    src shape expected (Z_s, Y_s, X_s), target_shape = (Z_t, Y_t, X_t).
+    """
+    tz, ty, tx = target_shape
+    sz, sy, sx = src.shape
+    out = np.zeros((tz, ty, tx), dtype=src.dtype)
+    cz = min(sz, tz)
+    cy = min(sy, ty)
+    cx = min(sx, tx)
+    out[:cz, :cy, :cx] = src[:cz, :cy, :cx]
+    return out
+
+
+# -------------------------
 # Parse info.cfg helpers (kept from original)
 # -------------------------
 def parse_info_cfg(patient_dir: Path) -> Dict[str, Optional[str]]:
@@ -200,22 +324,9 @@ def load_per_frame_gt_map(patient_dir: Path, mask_glob: str = "*_frame*_gt.nii*"
         try:
             nii = nib.load(str(p))
             nii_c = canonicalize_nii(nii)
-            arr = np.asarray(nii_c.get_fdata())  # load mask array (small)
-            # Accept a few shapes
-            if arr.ndim == 4 and arr.shape[0] == 1:
-                arr3 = arr[0]
-            elif arr.ndim == 3:
-                arr3 = arr
-            elif arr.ndim == 2:
-                arr3 = arr[None, :, :]
-            else:
-                arr_s = np.squeeze(arr)
-                if arr_s.ndim == 3:
-                    arr3 = arr_s
-                elif arr_s.ndim == 2:
-                    arr3 = arr_s[None, :, :]
-                else:
-                    raise RuntimeError(f"Unexpected per-frame GT shape {arr.shape} for {p}")
+            arr = np.asarray(nii_c.get_fdata())  # lazy -> loads small mask arrays
+            # convert to (Z, Y, X) consistently
+            arr3 = mask_to_zyx(arr)
             mapping[int(t_idx)] = arr3.astype(np.uint8)
             used_files.append(p.name)
         except Exception as e:
@@ -240,16 +351,30 @@ def build_label_array_from_sources(image_shape: Tuple[int, int, int, int], patie
             nii = nib.load(str(gt4_path))
             nii_c = canonicalize_nii(nii)
             lbl = np.asarray(nii_c.get_fdata()).astype(np.uint8)
-            # shape handling
+            # shape handling: convert to (T, Z, Y, X)
             if lbl.ndim == 3:
-                lbl = lbl[None]
-            if lbl.ndim != 4:
+                # (X,Y,Z) -> treat as single timepoint (X,Y,Z,1) then transpose
+                lbl = lbl[..., None]
+                lbl = np.transpose(lbl, (3, 2, 1, 0))
+            elif lbl.ndim == 4:
+                # assume (X,Y,Z,T) -> convert to (T,Z,Y,X)
+                lbl = np.transpose(lbl, (3, 2, 1, 0))
+            else:
                 raise RuntimeError(f"Unexpected GT 4D shape {lbl.shape} for {gt4_path}")
-            # Copy into aligned container
+
+            # Now lbl has (T_lbl, Z_lbl, Y_lbl, X_lbl)
+            if lbl.ndim != 4:
+                raise RuntimeError(f"Unexpected after-transpose shape {lbl.shape} for {gt4_path}")
+
+            T_lbl, Z_lbl, Y_lbl, X_lbl = lbl.shape
             res = np.zeros((T_img, Z_img, Y_img, X_img), dtype=np.uint8)
-            t_copy = min(lbl.shape[0], T_img)
-            z_copy = min(lbl.shape[1], Z_img)
-            res[:t_copy, :z_copy, :Y_img, :X_img] = lbl[:t_copy, :z_copy, :Y_img, :X_img]
+            t_copy = min(T_lbl, T_img)
+            z_copy = min(Z_lbl, Z_img)
+            # pad/truncate safely if necessary
+            for tt in range(t_copy):
+                src_block = lbl[tt, :z_copy, :Y_img, :X_img]
+                padded = fit_or_pad_to_shape(src_block, (z_copy, Y_img, X_img))
+                res[tt, :z_copy, :Y_img, :X_img] = padded
             return res, "4d", [gt4_path.name]
         except Exception as e:
             logger.warning("Failed to load 4D GT %s: %s; falling back to per-frame", gt4_path.name, e)
@@ -263,9 +388,13 @@ def build_label_array_from_sources(image_shape: Tuple[int, int, int, int], patie
         if t_idx < 0 or t_idx >= T_img:
             logger.warning("Parsed frame index %d out of bounds for T=%d; skipping", t_idx, T_img)
             continue
+        # arr3 is now (Z, Y, X) by contract
         Z_lbl = arr3.shape[0]
         z_copy = min(Z_lbl, Z_img)
-        res[t_idx, :z_copy, :Y_img, :X_img] = arr3[:z_copy, :Y_img, :X_img]
+        # ensure arr3 fits target slice shape; pad/truncate if necessary
+        src_block = arr3[:z_copy, :Y_img, :X_img]
+        padded_block = fit_or_pad_to_shape(src_block, (z_copy, Y_img, X_img))
+        res[t_idx, :z_copy, :Y_img, :X_img] = padded_block
     return res, "per_frame", used_files
 
 
@@ -286,6 +415,7 @@ def process_volume(
     image_glob: str = "*_4d.nii*",
     dry_run: bool = False,
     stream: bool = True,
+    fix_headers: bool = False,
 ) -> Tuple[int, int]:
     """
     Process a single image; save 2D slices (data) and masks (if label_array provided) into out_root/<split>/<patient_id>/{data,masks}
@@ -295,6 +425,9 @@ def process_volume(
     logger.info("Processing patient %s from %s (split=%s)", patient_id, image_path.name, split)
 
     nii = nib.load(str(image_path))
+    # optionally rebuild header from data+affine to avoid bad qfac/pixdim warnings
+    if fix_headers:
+        nii = _rebuild_nifti_header_safe(nii)
     nii_c = canonicalize_nii(nii)
     # canonical shape is typically (X, Y, Z) or (X, Y, Z, T)
     shape = nii_c.shape
@@ -401,11 +534,15 @@ def process_volume(
                     mask_cropped = np.zeros_like(vol_norm, dtype=np.uint8)
                 else:
                     if crop > 0:
-                        mask_cropped = mask[crop:-crop, crop:-crop]
+                        try:
+                            mask_cropped = mask[crop:-crop, crop:-crop]
+                        except Exception:
+                            # If mask is smaller than crop, fallback to safe zeros
+                            mask_cropped = np.zeros_like(vol_norm, dtype=np.uint8)
                     else:
                         mask_cropped = mask
 
-                # fix shape mismatches conservatively
+                # fix shape mismatches conservatively (this logic retained, but should be rarer now)
                 if mask_cropped is not None and vol_cropped.shape != mask_cropped.shape:
                     try:
                         if mask_cropped.T.shape == vol_cropped.shape:
@@ -436,7 +573,7 @@ def process_volume(
         for t in labeled_frames:
             per_frame_nonzero[str(int(t))] = int(label_array[t].sum())
 
-    # update mask_manifest
+    # update mask_manifest (includes Group if present in info.cfg)
     mask_manifest[patient_id] = {
         "saved_images": int(saved_images),
         "saved_masks": int(saved_masks),
@@ -446,6 +583,7 @@ def process_volume(
         "label_files_used": label_files_used,
         "labeled_frame_indices": labeled_frames,
         "per_frame_nonzero": per_frame_nonzero,
+        "Group": patient_info.get("Group") if isinstance(patient_info, dict) else None,
     }
 
     # compute original_nonzero and saved_nonzero safely
@@ -525,6 +663,7 @@ def run(
     mask_glob: str = "*_frame*_gt.nii*",
     dry_run: bool = False,
     stream: bool = True,
+    fix_headers: bool = False,
 ):
     dataset_root = Path(dataset_root).resolve()
     if out_root is None:
@@ -589,6 +728,9 @@ def run(
             # determine canonical shape
             try:
                 nii_img = nib.load(str(image_path))
+                # optionally rebuild header early to get accurate dims for label alignment
+                if fix_headers:
+                    nii_img = _rebuild_nifti_header_safe(nii_img)
                 nii_c = canonicalize_nii(nii_img)
                 shape = nii_c.shape
                 # derive (T,Z,Y,X)
@@ -622,6 +764,7 @@ def run(
                     image_glob=image_glob,
                     dry_run=dry_run,
                     stream=stream,
+                    fix_headers=fix_headers,
                 )
             except Exception as e:
                 logger.exception("Failed to process %s: %s", patient_dir.name, e)
@@ -688,6 +831,7 @@ if __name__ == "__main__":
     parser.add_argument("--mask_glob", type=str, default="*_frame*_gt.nii*", help="Glob for discovering per-frame GT masks.")
     parser.add_argument("--dry_run", action="store_true", default=False, help="Do not write output files; only display what would be processed.")
     parser.add_argument("--stream", action="store_true", default=True, help="Stream slices instead of loading full volume into memory (recommended).")
+    parser.add_argument("--fix_headers", action="store_true", default=False, help="Rebuild image header from data+affine to fix bad pixdim/qfac before canonicalization (memory heavy).")
     args = parser.parse_args()
 
     run(
@@ -706,4 +850,5 @@ if __name__ == "__main__":
         mask_glob=args.mask_glob,
         dry_run=args.dry_run,
         stream=args.stream,
+        fix_headers=args.fix_headers,
     )

@@ -3,23 +3,36 @@ python -m twin_core.utils.preprocessing_pipeline `
   --crop 8
 
 ------------------------
+### PRE-SPLIT DATASET###
 python -m twin_core.utils.bimodal_preprocessing_pipeline `
-  --dataset_root "C:/.../merged_dataset_150" `
+  --dataset_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database" `
+  --train_input "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\training" `
+  --test_input  "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\testing" `
   --crop 8 `
-  --train_ratio 0.8
+  --out_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\preprocessed" `
+  --fix_headers `
+  --write_labeled_split
 
 or
 
+### SINGLE-POOL DATASET### 
 python -m twin_core.utils.bimodal_preprocessing_pipeline `
-  --dataset_root "C:/.../ACDC_root" `
-  --train_input "C:/.../ACDC_root/training" `
-  --test_input  "C:/.../ACDC_root/testing" `
-  --crop 8
+  --dataset_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\merged_dataset_150" `
+  --crop 8 `
+  --train_ratio 0.8 `
+  --seed 42 `
+  --out_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\merged_dataset_150\preprocessed" `
+  --fix_headers `
+  --write_labeled_split
+
 
 -------------------------
 
 python -m twin_core.utils.training_pipeline `
   --config "twin_core/configs/smoke_train_config.json"
+
+python -m twin_core.utils.training_pipeline_updated `
+  --config "twin_core/configs/train_config_updated.json"
 
 python -m twin_core.debug.training_pipeline_debug --config twin_core/configs/smoke_train_config.json
 
@@ -71,11 +84,12 @@ python -m twin_core.utils.plot_confusions --inputs "C:\Users\dimok\VSCodeProject
 
 python -m twin_core.utils.merge_gt_and_pred `
   --data_root "C:/Users/dimok/Downloads/PhD/Digital Twin/Data/Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)/Resources/database/merged_dataset_150" `
-  --patient 4 --frame 15 `
+  --patient 52 --frame 1 `
   --checkpoint "checkpoints/ckpt_best.pt" `
   --z 5 `
   --out_dir "outputs/merge" --device cuda
   
+
 
 
 -----------------------------------------
