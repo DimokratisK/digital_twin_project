@@ -12,8 +12,9 @@ Improvements:
 - Writes mask_manifest.json, split_manifest.json and split_manifest_labeled.json (if requested)
 
 Changes applied:
-- More robust per-frame mask handling: reliably reorder mask axes to (Z,Y,X) and pad/truncate
-  masks to fit the target image shape before assignment to avoid broadcasting errors.
+- More robust per-frame mask handling: deterministically choose the mask axis permutation that
+  maximizes nonzero overlap when aligned to the canonical image target shape.
+- Center-align padding/truncation to reduce spatial offset errors.
 - Added a conservative --fix_headers flag which rebuilds the NIfTI header from data+affine
   to avoid nibabel pixdim/qfac warnings and header inconsistencies (memory heavy).
 """
@@ -26,6 +27,7 @@ import logging
 import sys
 from typing import Dict, Optional, Tuple, List, Any
 
+import itertools
 import numpy as np
 import nibabel as nib
 from tqdm import tqdm
@@ -188,82 +190,174 @@ def _rebuild_nifti_header_safe(nii: nib.Nifti1Image) -> nib.Nifti1Image:
 # -------------------------
 # Mask helpers: convert any loaded mask array -> (Z, Y, X) and pad/truncate safely
 # -------------------------
-def mask_to_zyx(arr: np.ndarray) -> np.ndarray:
-    """
-    Convert a mask array from nibabel into a canonical (Z, Y, X) 3D numpy array.
-    Accepts common input shapes:
-      - (X, Y)          -> returns (1, Y, X)
-      - (X, Y, Z)       -> returns (Z, Y, X)
-      - (X, Y, Z, T)    -> returns (Z, Y, X) taking T=0 (most masks are single-frame)
-      - (1, Z, Y, X)    -> returns (Z, Y, X)
-      - (Z, Y, X)       -> returns unchanged
-    Heuristics are conservative to avoid mis-ordering.
-    """
-    if arr is None:
-        raise ValueError("mask_to_zyx received None")
-
-    a = np.asarray(arr)
-    nd = a.ndim
-
-    # 2D mask -> (1, Y, X)
-    if nd == 2:
-        return a[None, :, :].astype(np.uint8)
-
-    # 3D: ambiguous (Z,Y,X) or (X,Y,Z). Use heuristics:
-    if nd == 3:
-        z, y, x = a.shape
-        # If first dim is small (<= 20) it's likely Z; else if last dim is small, treat accordingly.
-        if z <= 20 and x > 20:
-            # likely already (Z, Y, X)
-            return a.astype(np.uint8)
-        # if first dim is large and last dim small -> assume (X,Y,Z) and transpose
-        if x <= 20 and z > 20:
-            return np.transpose(a, (2, 1, 0)).astype(np.uint8)
-        # fallback: if last dim looks like X (large) assume (Z,Y,X) already
-        if x > 20:
-            return a.astype(np.uint8)
-        # otherwise try transpose to (Z,Y,X)
-        return np.transpose(a, (2, 1, 0)).astype(np.uint8)
-
-    # 4D: try to extract meaningful 3D block
-    if nd == 4:
-        # if shape looks like (1, Z, Y, X) -> remove leading singleton
-        if a.shape[0] == 1:
-            b = a[0]
-            if b.ndim == 3:
-                return b.astype(np.uint8)
-        # otherwise assume (X, Y, Z, T) -> take first timepoint -> (X,Y,Z)
-        try:
-            b = a[..., 0]  # (X, Y, Z) or similar
-            return np.transpose(b, (2, 1, 0)).astype(np.uint8)
-        except Exception:
-            pass
-
-    # Fallback: squeeze and try again
-    a_s = np.squeeze(a)
-    if a_s.ndim == 3:
-        return mask_to_zyx(a_s)
-    if a_s.ndim == 2:
-        return a_s[None, :, :].astype(np.uint8)
-
-    logger.warning("mask_to_zyx: unexpected mask shape %s, returning minimal zeros (1,1,1)", a.shape)
-    return np.zeros((1, 1, 1), dtype=np.uint8)
-
-
-def fit_or_pad_to_shape(src: np.ndarray, target_shape: Tuple[int, int, int]) -> np.ndarray:
+def fit_or_pad_to_shape_center(src: np.ndarray, target_shape: Tuple[int, int, int]) -> np.ndarray:
     """
     Return a new array with shape == target_shape by copying the overlapping region of src
-    and zero-padding where src is smaller. Left-align copy in each axis.
+    centered in each axis and zero-padding where src is smaller. If src is larger, it is center-cropped.
     src shape expected (Z_s, Y_s, X_s), target_shape = (Z_t, Y_t, X_t).
     """
     tz, ty, tx = target_shape
     sz, sy, sx = src.shape
     out = np.zeros((tz, ty, tx), dtype=src.dtype)
-    cz = min(sz, tz)
-    cy = min(sy, ty)
-    cx = min(sx, tx)
-    out[:cz, :cy, :cx] = src[:cz, :cy, :cx]
+
+    # compute source start and target start for each axis to center
+    def centers(sz, tz):
+        if sz <= tz:
+            # place src centered into target
+            t_start = (tz - sz) // 2
+            s_start = 0
+            length = sz
+        else:
+            # crop src centered
+            s_start = (sz - tz) // 2
+            t_start = 0
+            length = tz
+        return s_start, t_start, length
+
+    s_z, t_z, lz = centers(sz, tz)
+    s_y, t_y, ly = centers(sy, ty)
+    s_x, t_x, lx = centers(sx, tx)
+
+    out[t_z : t_z + lz, t_y : t_y + ly, t_x : t_x + lx] = src[s_z : s_z + lz, s_y : s_y + ly, s_x : s_x + lx]
     return out
+
+
+def _evaluate_candidate_and_score(candidate: np.ndarray, target_shape: Tuple[int, int, int]) -> Tuple[int, np.ndarray]:
+    """
+    Pad/crop center-align candidate to target_shape and return (score, padded_array),
+    where score = number of non-zero elements (higher is better).
+    """
+    padded = fit_or_pad_to_shape_center(candidate, target_shape)
+    score = int(np.count_nonzero(padded))
+    return score, padded
+
+
+def mask_to_zyx(arr: np.ndarray, target_shape: Optional[Tuple[int, int, int]] = None) -> np.ndarray:
+    """
+    Convert a mask array from nibabel into a canonical (Z, Y, X) 3D numpy array.
+    If target_shape is provided (Z_t, Y_t, X_t), the function will try possible
+    permutations of the input axes and choose the permutation that yields the largest
+    nonzero count after center-fitting to target_shape. This deterministic strategy
+    prevents accidental mis-ordering when shapes are ambiguous.
+
+    Accepts common input shapes:
+      - (X, Y)          -> returns (1, Y, X)
+      - (X, Y, Z)       -> returns (Z, Y, X) (permutation selected by scoring)
+      - (X, Y, Z, T)    -> returns (Z, Y, X) taking a meaningful 3D block (T=0) then permuting/scoring
+      - (1, Z, Y, X)    -> returns (Z, Y, X)
+      - (Z, Y, X)       -> returns unchanged
+    """
+    if arr is None:
+        raise ValueError("mask_to_zyx received None")
+
+    a = np.asarray(arr)
+    # If 2D, return (1, Y, X)
+    if a.ndim == 2:
+        return a[None, :, :].astype(np.uint8)
+
+    # If 4D, pick a 3D block to evaluate:
+    if a.ndim == 4:
+        # Common representations include (T,X,Y,Z), (X,Y,Z,T), or (1,Z,Y,X)
+        # Heuristic: prefer a block with a time dimension if that makes sense
+        # Try a few sensible extractions and choose best via scoring if target present
+        candidates_3d = []
+
+        # If first dim == 1 and last dim > 1, treat as (1, Z, Y, X) or similar
+        if a.shape[0] == 1 and a.shape[-1] > 1:
+            b = a[0]
+            candidates_3d.append(b)
+        # If last dim likely T (small) and first three look spatial
+        if a.shape[-1] <= 10 and a.shape[0] > 10:
+            # assume (X, Y, Z, T) take t=0 -> (X,Y,Z)
+            try:
+                candidates_3d.append(a[..., 0])
+            except Exception:
+                pass
+        # As fallback, squeeze
+        try:
+            a_s = np.squeeze(a)
+            if a_s.ndim == 3:
+                candidates_3d.append(a_s)
+        except Exception:
+            pass
+
+        # fallback: take first non-singleton 3D slice
+        if not candidates_3d:
+            # attempt a[...,0] safely
+            try:
+                candidates_3d.append(a[..., 0])
+            except Exception:
+                pass
+
+        # For each candidate 3D, run the 3D handler below with scoring
+        best_score = -1
+        best_padded = None
+        for cand in candidates_3d:
+            try:
+                cand3 = mask_to_zyx(cand, target_shape=target_shape)
+                # cand3 already returned padded when target present; evaluate
+                if target_shape is not None:
+                    padded = fit_or_pad_to_shape_center(cand3, target_shape)
+                    score = int(np.count_nonzero(padded))
+                else:
+                    score = int(np.count_nonzero(cand3))
+                if score > best_score:
+                    best_score = score
+                    best_padded = cand3
+            except Exception:
+                continue
+
+        if best_padded is not None:
+            # If target_shape provided, ensure final shape
+            if target_shape is not None and best_padded.shape != target_shape:
+                return fit_or_pad_to_shape_center(best_padded, target_shape).astype(np.uint8)
+            return best_padded.astype(np.uint8)
+
+        # give up: fall through to squeeze
+        a = np.squeeze(a)
+
+    # Now a is 3D (or squeezed to 3D)
+    if a.ndim == 3:
+        # Try permutations of axes to map to (Z, Y, X)
+        # We'll consider all permutations of (0,1,2)
+        best_score = -1
+        best_array = None
+        tried = []
+        perms = list(itertools.permutations((0, 1, 2)))
+        for perm in perms:
+            try:
+                cand = np.transpose(a, perm)
+            except Exception:
+                continue
+            # candidate now some (d0,d1,d2) we will interpret as (Z,Y,X)
+            if target_shape is not None:
+                score, padded = _evaluate_candidate_and_score(cand, target_shape)
+            else:
+                # Without target_shape, prefer candidate where first dim (Z) is <= 50 (typical slices)
+                # and maximize nonzero count
+                padded = cand
+                score = int(np.count_nonzero(padded))
+            tried.append((perm, cand.shape, score))
+            if score > best_score:
+                best_score = score
+                best_array = padded
+
+        if best_array is not None:
+            return best_array.astype(np.uint8)
+
+        # fallback: if nothing worked, attempt to guess common transpose
+        z, y, x = a.shape
+        if z <= 20 and x > 20:
+            return a.astype(np.uint8)
+        return np.transpose(a, (2, 1, 0)).astype(np.uint8)
+
+    # If result is 2D or otherwise, return minimal zeros
+    a_s = np.squeeze(a)
+    if a_s.ndim == 2:
+        return a_s[None, :, :].astype(np.uint8)
+
+    logger.warning("mask_to_zyx: unexpected mask shape %s, returning minimal zeros (1,1,1)", a.shape)
+    return np.zeros((1, 1, 1), dtype=np.uint8)
 
 
 # -------------------------
@@ -312,7 +406,16 @@ def info_values_as_ints(info: Dict[str, Optional[str]]) -> Dict[str, Optional[An
 # -------------------------
 # Load per-frame GT map (uses nibabel canonicalization)
 # -------------------------
-def load_per_frame_gt_map(patient_dir: Path, mask_glob: str = "*_frame*_gt.nii*") -> Tuple[Dict[int, np.ndarray], List[str]]:
+def load_per_frame_gt_map(
+    patient_dir: Path,
+    mask_glob: str = "*_frame*_gt.nii*",
+    target_shape: Optional[Tuple[int, int, int]] = None,
+) -> Tuple[Dict[int, np.ndarray], List[str]]:
+    """
+    Load per-frame GT files and convert to a mapping t_index -> ndarray(Z, Y, X).
+    If target_shape (Z_t, Y_t, X_t) is provided, mask_to_zyx will use it to choose the best permutation/pad.
+    Returns (mapping, used_files)
+    """
     frame_files = sorted(list(patient_dir.glob(mask_glob)))
     mapping: Dict[int, np.ndarray] = {}
     used_files: List[str] = []
@@ -325,8 +428,11 @@ def load_per_frame_gt_map(patient_dir: Path, mask_glob: str = "*_frame*_gt.nii*"
             nii = nib.load(str(p))
             nii_c = canonicalize_nii(nii)
             arr = np.asarray(nii_c.get_fdata())  # lazy -> loads small mask arrays
-            # convert to (Z, Y, X) consistently
-            arr3 = mask_to_zyx(arr)
+            # convert to (Z, Y, X) consistently using target guidance
+            if target_shape is not None:
+                arr3 = mask_to_zyx(arr, target_shape=target_shape)
+            else:
+                arr3 = mask_to_zyx(arr)
             mapping[int(t_idx)] = arr3.astype(np.uint8)
             used_files.append(p.name)
         except Exception as e:
@@ -338,12 +444,18 @@ def load_per_frame_gt_map(patient_dir: Path, mask_glob: str = "*_frame*_gt.nii*"
 # -------------------------
 # Build full label array aligned with canonical image shape (T,Z,Y,X)
 # -------------------------
-def build_label_array_from_sources(image_shape: Tuple[int, int, int, int], patient_dir: Path, mask_glob: str = "*_frame*_gt.nii*") -> Tuple[Optional[np.ndarray], str, List[str]]:
+def build_label_array_from_sources(
+    image_shape: Tuple[int, int, int, int],
+    patient_dir: Path,
+    mask_glob: str = "*_frame*_gt.nii*",
+) -> Tuple[Optional[np.ndarray], str, List[str]]:
     """
     Tries to build a label array (T,Z,Y,X) aligned to the canonicalized image axes.
     Returns (label_array or None, label_source, list_of_files_used)
     """
     T_img, Z_img, Y_img, X_img = image_shape
+    target_shape = (Z_img, Y_img, X_img)
+
     # 1) Try single 4D GT (look for *_4d_gt.nii*)
     gt4_path = next(patient_dir.glob("*_4d_gt.nii*"), None)
     if gt4_path is not None:
@@ -370,17 +482,17 @@ def build_label_array_from_sources(image_shape: Tuple[int, int, int, int], patie
             res = np.zeros((T_img, Z_img, Y_img, X_img), dtype=np.uint8)
             t_copy = min(T_lbl, T_img)
             z_copy = min(Z_lbl, Z_img)
-            # pad/truncate safely if necessary
+            # pad/truncate safely if necessary (center aligned)
             for tt in range(t_copy):
                 src_block = lbl[tt, :z_copy, :Y_img, :X_img]
-                padded = fit_or_pad_to_shape(src_block, (z_copy, Y_img, X_img))
+                padded = fit_or_pad_to_shape_center(src_block, (z_copy, Y_img, X_img))
                 res[tt, :z_copy, :Y_img, :X_img] = padded
             return res, "4d", [gt4_path.name]
         except Exception as e:
             logger.warning("Failed to load 4D GT %s: %s; falling back to per-frame", gt4_path.name, e)
 
     # 2) per-frame
-    mapping, used_files = load_per_frame_gt_map(patient_dir, mask_glob=mask_glob)
+    mapping, used_files = load_per_frame_gt_map(patient_dir, mask_glob=mask_glob, target_shape=target_shape)
     if not mapping:
         return None, "none", []
     res = np.zeros((T_img, Z_img, Y_img, X_img), dtype=np.uint8)
@@ -388,12 +500,12 @@ def build_label_array_from_sources(image_shape: Tuple[int, int, int, int], patie
         if t_idx < 0 or t_idx >= T_img:
             logger.warning("Parsed frame index %d out of bounds for T=%d; skipping", t_idx, T_img)
             continue
-        # arr3 is now (Z, Y, X) by contract
+        # arr3 is now (Z, Y, X) by contract (and likely already center-padded to target when scoring happened)
         Z_lbl = arr3.shape[0]
         z_copy = min(Z_lbl, Z_img)
-        # ensure arr3 fits target slice shape; pad/truncate if necessary
+        # ensure arr3 fits target slice shape; center pad/truncate if necessary
         src_block = arr3[:z_copy, :Y_img, :X_img]
-        padded_block = fit_or_pad_to_shape(src_block, (z_copy, Y_img, X_img))
+        padded_block = fit_or_pad_to_shape_center(src_block, (z_copy, Y_img, X_img))
         res[t_idx, :z_copy, :Y_img, :X_img] = padded_block
     return res, "per_frame", used_files
 
