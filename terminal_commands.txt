@@ -10,7 +10,6 @@ python -m twin_core.utils.bimodal_preprocessing_pipeline `
   --test_input  "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\testing" `
   --crop 8 `
   --out_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\preprocessed" `
-  --fix_headers `
   --write_labeled_split
 
 or
@@ -22,7 +21,6 @@ python -m twin_core.utils.bimodal_preprocessing_pipeline `
   --train_ratio 0.8 `
   --seed 42 `
   --out_root "C:\Users\dimok\Downloads\PhD\Digital Twin\Data\Human Heart Project - Automated Cardiac Diagnosis Challenge (ACDC)\Resources\database\merged_dataset_150\preprocessed" `
-  --fix_headers `
   --write_labeled_split
 
 
