@@ -1,0 +1,62 @@
+{
+    "channel_names": {
+        "0": "cineMRI"
+    },
+    "labels": {
+        "background": 0,
+        "RV": 1,
+        "MYO": 2,
+        "LV": 3
+    },
+    "numTraining": 10,
+    "file_ending": ".nii.gz",
+    "licence": "See ACDC challenge terms",
+    "converted_by": "twin_core.nnunet_pipeline.convert_acdc_dataset",
+    "name": "ACDC",
+    "description": "ACDC cardiac segmentation - 5 patients, ED+ES frames",
+    "patient_metadata": {
+        "patient001": {
+            "ED": 1,
+            "ES": 12,
+            "Group": "DCM",
+            "Height": 184.0,
+            "NbFrame": 30,
+            "Weight": 95.0
+        },
+        "patient002": {
+            "ED": 1,
+            "ES": 12,
+            "Group": "DCM",
+            "Height": 160.0,
+            "NbFrame": 30,
+            "Weight": 70.0
+        },
+        "patient003": {
+            "ED": 1,
+            "ES": 15,
+            "Group": "DCM",
+            "Height": 165.0,
+            "NbFrame": 30,
+            "Weight": 77.0
+        },
+        "patient004": {
+            "ED": 1,
+            "ES": 15,
+            "Group": "DCM",
+            "Height": 159.0,
+            "NbFrame": 28,
+            "Weight": 46.0
+        },
+        "patient005": {
+            "ED": 1,
+            "ES": 13,
+            "Group": "DCM",
+            "Height": 165.0,
+            "NbFrame": 30,
+            "Weight": 77.0
+        }
+    },
+    "group_distribution": {
+        "DCM": 5
+    }
+}
