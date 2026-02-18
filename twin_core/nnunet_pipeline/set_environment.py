@@ -17,24 +17,55 @@ from pathlib import Path
 
 # Project root: two levels up from this file (twin_core/nnunet_pipeline/ -> project root)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-NNUNET_DATA_DIR = PROJECT_ROOT / "nnunet_data"
 
-PATHS = {
+# Data root: use NNUNET_DATA_ROOT env var if set (e.g. on HPC scratch disk),
+# otherwise default to <project_root>/nnunet_data.
+# On the lab supercomputer, if data lives on a separate partition:
+#   export NNUNET_DATA_ROOT=/scratch/user/nnunet_data
+NNUNET_DATA_DIR = Path(os.environ.get("NNUNET_DATA_ROOT", PROJECT_ROOT / "nnunet_data"))
+
+PATH_DEFAULTS = {
     "nnUNet_raw": NNUNET_DATA_DIR / "raw",
     "nnUNet_preprocessed": NNUNET_DATA_DIR / "preprocessed",
     "nnUNet_results": NNUNET_DATA_DIR / "results",
 }
 
+# Hardware-specific settings (overridable via actual environment variables).
+# These defaults are conservative for low-VRAM GPUs (e.g. RTX 3050 4GB).
+# On the lab supercomputer, set nnUNet_compile=true and nnUNet_n_proc_DA=12
+# (or higher) via the environment before running.
+HARDWARE_DEFAULTS = {
+    "nnUNet_compile": "false",   # torch.compile uses extra VRAM; disable on low-VRAM GPUs
+    "nnUNet_n_proc_DA": "2",     # data augmentation workers; reduce to save RAM
+}
+
+# All defaults that can be overridden by the environment
+ALL_DEFAULTS = {**PATH_DEFAULTS, **HARDWARE_DEFAULTS}
+
 
 def set_env_vars():
-    """Set nnU-Net environment variables for the current process."""
-    for var_name, path in PATHS.items():
-        os.environ[var_name] = str(path)
+    """Set nnU-Net environment variables for the current process.
+
+    All variables are only set if not already present in the environment,
+    so the lab's supercomputer can override any of them without touching this file.
+
+    To redirect data to a different disk on HPC:
+        export NNUNET_DATA_ROOT=/scratch/user/nnunet_data
+    To override individual paths:
+        export nnUNet_raw=/custom/path/raw
+    To override hardware settings:
+        export nnUNet_compile=true
+        export nnUNet_n_proc_DA=12
+    """
+    for var_name, default in ALL_DEFAULTS.items():
+        if var_name not in os.environ:
+            os.environ[var_name] = str(default)
 
 
 def create_directories():
     """Create the nnU-Net data directories if they don't exist."""
-    for var_name, path in PATHS.items():
+    for var_name in PATH_DEFAULTS:
+        path = Path(os.environ[var_name])
         path.mkdir(parents=True, exist_ok=True)
         print(f"  {var_name}: {path}")
 
@@ -67,7 +98,7 @@ def check_torch():
 def print_status():
     """Print current environment variable status."""
     print("\n--- Current Environment Variables ---")
-    for var_name, expected_path in PATHS.items():
+    for var_name, expected_path in PATH_DEFAULTS.items():
         current = os.environ.get(var_name)
         if current is None:
             print(f"  {var_name}: NOT SET")
@@ -79,13 +110,13 @@ def print_setup_instructions():
     """Print commands for permanent setup."""
     print("\n--- To set permanently in your conda environment ---")
     print("Run these commands once in your activated conda env:\n")
-    for var_name, path in PATHS.items():
+    for var_name, path in PATH_DEFAULTS.items():
         print(f'  conda env config vars set {var_name}="{path}"')
     print("\nThen reactivate your environment:")
-    print("  conda deactivate && conda activate digital_twin")
+    print("  conda deactivate && conda activate lab_venv_nnunet")
 
     print("\n--- Or set permanently via Windows (PowerShell) ---\n")
-    for var_name, path in PATHS.items():
+    for var_name, path in PATH_DEFAULTS.items():
         print(f'  [System.Environment]::SetEnvironmentVariable("{var_name}", "{path}", "User")')
 
 
@@ -108,7 +139,7 @@ def main():
         create_directories()
         print("\n--- Setting Environment Variables (this process) ---")
         set_env_vars()
-        for var_name in PATHS:
+        for var_name in PATH_DEFAULTS:
             print(f"  {var_name} = {os.environ[var_name]}")
         print("\nDone. Environment configured for this process.")
     else:

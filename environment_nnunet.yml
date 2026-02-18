@@ -1,0 +1,23 @@
+# Environment for nnU-Net training (digital twin project).
+#
+# BEFORE CREATING THIS ENVIRONMENT:
+#   Check your CUDA version:  nvidia-smi  (top-right shows e.g. "CUDA Version: 12.6")
+#   Replace "cu126" in the pip section below with your version:
+#     CUDA 11.8 -> cu118 | CUDA 12.1 -> cu121 | CUDA 12.4 -> cu124 | CUDA 12.6 -> cu126
+#
+# Setup (run from the project root):
+#   conda env create -f environment_nnunet.yml
+#   conda activate lab_venv_nnunet
+#   pip install -e ./nnUNet
+
+name: lab_venv_nnunet
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu126  # <-- CHANGE cu126
+      - torch>=2.1.2,!=2.9.*
+      - torchvision
+      - torchaudio

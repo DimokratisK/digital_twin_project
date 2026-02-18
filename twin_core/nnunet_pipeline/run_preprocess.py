@@ -1,13 +1,9 @@
 """Wrapper to run nnU-Net plan_and_preprocess with environment setup."""
 import sys
-import os
 
-# Set environment variables
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-NNUNET_DATA = os.path.join(PROJECT_ROOT, "nnunet_data")
-os.environ["nnUNet_raw"] = os.path.join(NNUNET_DATA, "raw")
-os.environ["nnUNet_preprocessed"] = os.path.join(NNUNET_DATA, "preprocessed")
-os.environ["nnUNet_results"] = os.path.join(NNUNET_DATA, "results")
+from twin_core.nnunet_pipeline.set_environment import set_env_vars, create_directories
+set_env_vars()
+create_directories()
 
 from nnunetv2.experiment_planning.plan_and_preprocess_api import (
     extract_fingerprints,

@@ -1,0 +1,39 @@
+#--------------
+# PRE-TRAINING
+#--------------
+
+# 1. Clone the repo
+git clone <repo_url>  #PLACEHOLDER URL FOR REPO URL
+cd digital_twin_project
+git clone https://github.com/MIC-DKFZ/nnUNet.git nnUNet
+
+
+# 2. Edit environment_nnunet.yml: change cu126 to match lab's GPU 
+
+# 3. Create and activate the conda environment
+conda env create -f environment_nnunet.yml
+conda activate lab_venv_nnunet
+
+# 4. Install nnU-Net from the submodule
+pip install -e ./nnUNet
+
+# 5. Copy the preprocessed data folder into place:
+#    nnunet_data/preprocessed/  ->  <project_root>/nnunet_data/preprocessed/
+#    (if using scratch disk, copy there instead and set the variable below)
+
+# 6. If data lives on a scratch disk (otherwise skip — also needed in every new terminal session)
+export NNUNET_DATA_ROOT=/scratch/user/nnunet_data
+
+
+#----------
+# TRAINING
+#----------
+
+python -m twin_core.nnunet_pipeline.run_training --profile full
+
+
+#---------------
+# POST-TRAINING
+#---------------
+
+python -m twin_core.nnunet_pipeline.run_find_best_config

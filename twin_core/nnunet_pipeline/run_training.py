@@ -17,12 +17,29 @@ import argparse
 import subprocess
 import sys
 import os
+from typing import Optional, Union
 
 # Set up environment before anything else
 from twin_core.nnunet_pipeline.set_environment import set_env_vars, create_directories
 set_env_vars()
 create_directories()
 
+
+EPOCH_TO_TRAINER = {
+    1: "nnUNetTrainer_1epoch",
+    5: "nnUNetTrainer_5epochs",
+    10: "nnUNetTrainer_10epochs",
+    20: "nnUNetTrainer_20epochs",
+    50: "nnUNetTrainer_50epochs",
+    100: "nnUNetTrainer_100epochs",
+    250: "nnUNetTrainer_250epochs",
+    500: "nnUNetTrainer_500epochs",
+    750: "nnUNetTrainer_750epochs",
+    1000: "nnUNetTrainer",  # default
+    2000: "nnUNetTrainer_2000epochs",
+    4000: "nnUNetTrainer_4000epochs",
+    8000: "nnUNetTrainer_8000epochs",
+}
 
 PROFILES = {
     "smoke": {
@@ -34,10 +51,10 @@ PROFILES = {
     },
     "full": {
         "description": "Full training (supercomputer)",
-        "config": "2d",
+        "config": ["2d", "3d_fullres"],  # train both, then compare with nnUNetv2_find_best_configuration
         "fold": "all",  # will be expanded to 0,1,2,3,4
         "num_epochs": 1000,  # nnU-Net default
-        "npz": True,
+        "npz": True,  # required for ensembling/comparison
     },
 }
 
@@ -48,17 +65,26 @@ def build_train_command(
     fold: int,
     num_epochs: int = 1000,
     npz: bool = False,
-    extra_args: list = None,
+    extra_args: Optional[list] = None,
 ) -> list:
     """Build the nnUNetv2_train command."""
+    # nnU-Net does NOT accept a -num_epochs flag.
+    # Epoch count is controlled by selecting a trainer class variant.
+    trainer = EPOCH_TO_TRAINER.get(num_epochs)
+    if trainer is None:
+        valid = sorted(EPOCH_TO_TRAINER.keys())
+        raise ValueError(
+            f"num_epochs={num_epochs} has no matching trainer class. "
+            f"Valid values: {valid}"
+        )
+
     cmd = [
         sys.executable, "-m", "nnunetv2.run.run_training",
         str(dataset_id),
         config,
         str(fold),
+        "-tr", trainer,
     ]
-    if num_epochs != 1000:
-        cmd.extend(["-num_epochs", str(num_epochs)])
     if npz:
         cmd.append("--npz")
     if extra_args:
@@ -68,12 +94,12 @@ def build_train_command(
 
 def run_training(
     dataset_id: int = 27,
-    profile: str = None,
-    config: str = None,
-    fold=None,
-    num_epochs: int = None,
+    profile: Optional[str] = None,
+    config: Optional[Union[str, list]] = None,
+    fold: Optional[Union[int, str]] = None,
+    num_epochs: Optional[int] = None,
     npz: bool = False,
-    extra_args: list = None,
+    extra_args: Optional[list] = None,
 ):
     """Run nnU-Net training with the specified settings."""
     # Apply profile defaults, then override with explicit args
@@ -89,6 +115,12 @@ def run_training(
         fold = fold if fold is not None else 0
         num_epochs = num_epochs if num_epochs is not None else 1000
 
+    # Normalize config to a list
+    if isinstance(config, str):
+        configs = [config]
+    else:
+        configs = list(config)
+
     # Expand "all" folds
     if fold == "all":
         folds = [0, 1, 2, 3, 4]
@@ -97,32 +129,34 @@ def run_training(
 
     print(f"\n=== nnU-Net Training ===")
     print(f"  Dataset ID: {dataset_id}")
-    print(f"  Configuration: {config}")
+    print(f"  Configurations: {configs}")
     print(f"  Folds: {folds}")
     print(f"  Epochs: {num_epochs}")
     print(f"  Save softmax (--npz): {npz}")
     print(f"  nnUNet_results: {os.environ.get('nnUNet_results', 'NOT SET')}")
     print()
 
-    for f in folds:
-        cmd = build_train_command(
-            dataset_id=dataset_id,
-            config=config,
-            fold=f,
-            num_epochs=num_epochs,
-            npz=npz,
-            extra_args=extra_args,
-        )
-        print(f"--- Fold {f} ---")
-        print(f"  Command: {' '.join(cmd)}\n")
+    for cfg in configs:
+        print(f"=== Configuration: {cfg} ===\n")
+        for f in folds:
+            cmd = build_train_command(
+                dataset_id=dataset_id,
+                config=cfg,
+                fold=f,
+                num_epochs=num_epochs,
+                npz=npz,
+                extra_args=extra_args,
+            )
+            print(f"--- {cfg} / Fold {f} ---")
+            print(f"  Command: {' '.join(cmd)}\n")
 
-        result = subprocess.run(cmd, env=os.environ.copy())
+            result = subprocess.run(cmd, env=os.environ.copy())
 
-        if result.returncode != 0:
-            print(f"\nERROR: Training failed for fold {f} (exit code {result.returncode})")
-            sys.exit(result.returncode)
+            if result.returncode != 0:
+                print(f"\nERROR: Training failed for {cfg} fold {f} (exit code {result.returncode})")
+                sys.exit(result.returncode)
 
-        print(f"\n  Fold {f} completed successfully.\n")
+            print(f"\n  {cfg} / Fold {f} completed successfully.\n")
 
     print("=== All training runs completed ===")
 
