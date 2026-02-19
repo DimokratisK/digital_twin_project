@@ -1,0 +1,582 @@
+nnUNet_raw: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\raw
+  nnUNet_preprocessed: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed
+  nnUNet_results: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\results
+Profile: smoke - Quick local test (RTX 3050 safe)
+
+=== nnU-Net Training ===
+  Dataset ID: 27
+  Configurations: ['2d']
+  Folds: [0]
+  Epochs: 5
+  Save softmax (--npz): False
+  nnUNet_results: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\results
+
+=== Configuration: 2d ===
+
+--- 2d / Fold 0 ---
+  Command: C:\Users\dimok\anaconda3\envs\lab_venv_nnunet\python.exe -m nnunetv2.run.run_training 27 2d 0 -tr nnUNetTrainer_5epochs
+
+
+############################
+INFO: You are using the old nnU-Net default plans. We have updated our recommendations. Please consider using those instead! Read more here: https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md
+############################
+
+Using device: cuda:0
+
+#######################################################################     
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################     
+
+2026-02-18 19:16:28.738704: do_dummy_2d_data_aug: False
+2026-02-18 19:16:28.748497: Using splits from existing split file: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\splits_final.json
+2026-02-18 19:16:28.762769: The split file contains 5 splits.
+2026-02-18 19:16:28.774268: Desired fold for training: 0
+2026-02-18 19:16:28.786702: This split has 240 training and 60 validation cases.
+C:\Users\dimok\anaconda3\envs\lab_venv_nnunet\Lib\site-packages\fft_conv_pytorch\fft_conv.py:139: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\pytorch\torch\csrc\autograd\python_variable_indexing.cpp:353.)
+  output = output[crop_slices].contiguous()
+using pin_memory on device 0
+using pin_memory on device 0
+C:\Users\dimok\anaconda3\envs\lab_venv_nnunet\Lib\site-packages\fft_conv_pytorch\fft_conv.py:139: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\pytorch\torch\csrc\autograd\python_variable_indexing.cpp:353.)
+  output = output[crop_slices].contiguous()
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 56, 'patch_size': [256, 224], 'median_image_size_in_voxels': [236.0, 213.0], 'spacing': [1.5234400033950806, 1.5234400033950806], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'architecture': {'network_class_name': 'dynamic_network_architectures.architectures.unet.PlainConvUNet', 'arch_kwargs': {'n_stages': 6, 'features_per_stage': [32, 64, 128, 256, 512, 512], 'conv_op': 'torch.nn.modules.conv.Conv2d', 'kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'strides': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'n_conv_per_stage': [2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2], 'conv_bias': True, 'norm_op': 'torch.nn.modules.instancenorm.InstanceNorm2d', 'norm_op_kwargs': {'eps': 1e-05, 'affine': True}, 'dropout_op': None, 'dropout_op_kwargs': None, 'nonlin': 'torch.nn.LeakyReLU', 'nonlin_kwargs': {'inplace': True}}, '_kw_requires_import': ['conv_op', 'norm_op', 'dropout_op', 'nonlin']}, 'batch_dice': True}
+
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset027_ACDC', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [10.0, 1.5234400033950806, 1.5234400033950806], 'original_median_shape_after_transp': [10, 256, 216], 'image_reader_writer': 'SimpleITKIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 1488.0, 'mean': 113.99423217773438, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 25.0, 'percentile_99_5': 558.0, 'std': 80.54415130615234}}}
+
+2026-02-18 19:16:46.725887: Unable to plot network architecture:
+2026-02-18 19:16:46.741157: No module named 'hiddenlayer'
+2026-02-18 19:16:46.799130: 
+2026-02-18 19:16:46.811671: Epoch 0
+2026-02-18 19:16:46.822449: Current learning rate: 0.01
+2026-02-18 19:55:17.910089: train_loss 0.052
+2026-02-18 19:55:17.960313: val_loss -0.3481
+2026-02-18 19:55:17.970475: Pseudo dice [np.float32(0.0275), np.float32(0.0), np.float32(0.6508)]
+2026-02-18 19:55:17.982667: Epoch time: 2311.11 s
+2026-02-18 19:55:17.993622: Yayy! New best EMA pseudo Dice: 0.22609999775886536
+2026-02-18 19:55:19.688141: 
+2026-02-18 19:55:19.698905: Epoch 1
+2026-02-18 19:55:19.709154: Current learning rate: 0.00818
+2026-02-18 20:28:51.269334: train_loss -0.5466
+2026-02-18 20:28:51.292536: val_loss -0.6832
+2026-02-18 20:28:51.303167: Pseudo dice [np.float32(0.6747), np.float32(0.7101), np.float32(0.9038)]
+2026-02-18 20:28:51.317562: Epoch time: 2011.58 s
+2026-02-18 20:28:51.330746: Yayy! New best EMA pseudo Dice: 0.2797999978065491
+2026-02-18 20:28:52.147792: 
+2026-02-18 20:28:52.160259: Epoch 2
+2026-02-18 20:28:52.170572: Current learning rate: 0.00631
+2026-02-18 21:02:15.018634: train_loss -0.7891
+2026-02-18 21:02:15.044314: val_loss -0.8356
+2026-02-18 21:02:15.055161: Pseudo dice [np.float32(0.8565), np.float32(0.8515), np.float32(0.9411)]
+2026-02-18 21:02:15.065211: Epoch time: 2002.87 s
+2026-02-18 21:02:15.078099: Yayy! New best EMA pseudo Dice: 0.3400999903678894
+2026-02-18 21:02:15.857990: 
+2026-02-18 21:02:15.870106: Epoch 3
+2026-02-18 21:02:15.880831: Current learning rate: 0.00438
+2026-02-18 21:35:39.201822: train_loss -0.8623
+2026-02-18 21:35:39.215599: val_loss -0.8645
+2026-02-18 21:35:39.225806: Pseudo dice [np.float32(0.8936), np.float32(0.8647), np.float32(0.9516)]
+2026-02-18 21:35:39.236507: Epoch time: 2003.34 s
+2026-02-18 21:35:39.248865: Yayy! New best EMA pseudo Dice: 0.39640000462532043
+2026-02-18 21:35:41.352175: 
+2026-02-18 21:35:41.362694: Epoch 4
+2026-02-18 21:35:41.374651: Current learning rate: 0.00235
+2026-02-18 22:09:14.297834: train_loss -0.8798
+2026-02-18 22:09:14.318239: val_loss -0.8682
+2026-02-18 22:09:14.329923: Pseudo dice [np.float32(0.89), np.float32(0.8716), np.float32(0.9516)]
+2026-02-18 22:09:14.340425: Epoch time: 2012.95 s
+2026-02-18 22:09:14.354113: Yayy! New best EMA pseudo Dice: 0.4472000002861023
+2026-02-18 22:09:15.741001: Training done.
+2026-02-18 22:09:15.825876: Using splits from existing split file: C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\splits_final.json
+2026-02-18 22:09:15.839919: The split file contains 5 splits.
+2026-02-18 22:09:15.860983: Desired fold for training: 0
+2026-02-18 22:09:15.877919: This split has 240 training and 60 validation cases.
+2026-02-18 22:09:15.896184: predicting patient008_frame01
+2026-02-18 22:09:15.958516: patient008_frame01, shape torch.Size([1, 10, 263, 204]), rank 0
+2026-02-18 22:09:17.792088: predicting patient008_frame13
+2026-02-18 22:09:17.828510: patient008_frame13, shape torch.Size([1, 10, 263, 204]), rank 0
+2026-02-18 22:09:18.932598: predicting patient009_frame01
+2026-02-18 22:09:18.982647: patient009_frame01, shape torch.Size([1, 10, 230, 187]), rank 0
+2026-02-18 22:09:19.417799: predicting patient009_frame13
+2026-02-18 22:09:19.481004: patient009_frame13, shape torch.Size([1, 10, 230, 187]), rank 0
+2026-02-18 22:09:20.028022: predicting patient012_frame01
+2026-02-18 22:09:20.124485: patient012_frame01, shape torch.Size([1, 10, 263, 189]), rank 0
+2026-02-18 22:09:21.197101: predicting patient012_frame13
+2026-02-18 22:09:21.246275: patient012_frame13, shape torch.Size([1, 10, 263, 189]), rank 0
+2026-02-18 22:09:22.231579: predicting patient013_frame01
+2026-02-18 22:09:22.300982: patient013_frame01, shape torch.Size([1, 10, 243, 205]), rank 0
+2026-02-18 22:09:22.879714: predicting patient013_frame14
+2026-02-18 22:09:22.979250: patient013_frame14, shape torch.Size([1, 10, 243, 205]), rank 0
+2026-02-18 22:09:23.534585: predicting patient026_frame01
+2026-02-18 22:09:23.599884: patient026_frame01, shape torch.Size([1, 10, 229, 194]), rank 0
+2026-02-18 22:09:24.204929: predicting patient026_frame12
+2026-02-18 22:09:24.305820: patient026_frame12, shape torch.Size([1, 10, 229, 194]), rank 0
+2026-02-18 22:09:33.420941: predicting patient032_frame01
+2026-02-18 22:09:33.511755: patient032_frame01, shape torch.Size([1, 10, 261, 246]), rank 0
+2026-02-18 22:09:35.144995: predicting patient032_frame12
+2026-02-18 22:09:35.630875: patient032_frame12, shape torch.Size([1, 10, 261, 246]), rank 0
+2026-02-18 22:09:36.883382: predicting patient036_frame01
+2026-02-18 22:09:37.001299: patient036_frame01, shape torch.Size([1, 8, 243, 205]), rank 0
+2026-02-18 22:09:37.290392: predicting patient036_frame12
+2026-02-18 22:09:37.329880: patient036_frame12, shape torch.Size([1, 8, 243, 205]), rank 0
+2026-02-18 22:09:37.608643: predicting patient042_frame01
+2026-02-18 22:09:37.675080: patient042_frame01, shape torch.Size([1, 9, 295, 267]), rank 0
+2026-02-18 22:09:38.803723: predicting patient042_frame16
+2026-02-18 22:09:38.873400: patient042_frame16, shape torch.Size([1, 9, 295, 267]), rank 0
+2026-02-18 22:09:40.034623: predicting patient044_frame01
+2026-02-18 22:09:40.090440: patient044_frame01, shape torch.Size([1, 9, 194, 230]), rank 0
+2026-02-18 22:09:40.682203: predicting patient044_frame11
+2026-02-18 22:09:40.730319: patient044_frame11, shape torch.Size([1, 9, 194, 230]), rank 0
+2026-02-18 22:09:41.306447: predicting patient046_frame01
+2026-02-18 22:09:41.371674: patient046_frame01, shape torch.Size([1, 9, 222, 263]), rank 0
+2026-02-18 22:09:41.926467: predicting patient046_frame10
+2026-02-18 22:09:41.982145: patient046_frame10, shape torch.Size([1, 9, 222, 263]), rank 0
+2026-02-18 22:09:42.567302: predicting patient047_frame01
+2026-02-18 22:09:42.635345: patient047_frame01, shape torch.Size([1, 9, 229, 282]), rank 0
+2026-02-18 22:09:43.226251: predicting patient047_frame09
+2026-02-18 22:09:43.302448: patient047_frame09, shape torch.Size([1, 9, 229, 282]), rank 0
+2026-02-18 22:09:43.896390: predicting patient056_frame01
+2026-02-18 22:09:43.941496: patient056_frame01, shape torch.Size([1, 9, 230, 194]), rank 0
+2026-02-18 22:09:44.237250: predicting patient056_frame12
+2026-02-18 22:09:44.292195: patient056_frame12, shape torch.Size([1, 9, 230, 194]), rank 0
+2026-02-18 22:09:44.589504: predicting patient057_frame01
+2026-02-18 22:09:44.647632: patient057_frame01, shape torch.Size([1, 8, 236, 198]), rank 0
+2026-02-18 22:09:44.915564: predicting patient057_frame09
+2026-02-18 22:09:44.964420: patient057_frame09, shape torch.Size([1, 8, 236, 198]), rank 0
+2026-02-18 22:09:45.250556: predicting patient061_frame01
+2026-02-18 22:09:45.302264: patient061_frame01, shape torch.Size([1, 9, 230, 193]), rank 0
+2026-02-18 22:09:45.616209: predicting patient061_frame10
+2026-02-18 22:09:45.670539: patient061_frame10, shape torch.Size([1, 9, 230, 193]), rank 0
+2026-02-18 22:09:45.964254: predicting patient065_frame01
+2026-02-18 22:09:46.033907: patient065_frame01, shape torch.Size([1, 8, 276, 257]), rank 0
+2026-02-18 22:09:47.064414: predicting patient065_frame14
+2026-02-18 22:09:47.123320: patient065_frame14, shape torch.Size([1, 8, 276, 257]), rank 0
+2026-02-18 22:09:48.123559: predicting patient075_frame01
+2026-02-18 22:09:48.207306: patient075_frame01, shape torch.Size([1, 14, 263, 197]), rank 0
+2026-02-18 22:09:49.094337: predicting patient075_frame06
+2026-02-18 22:09:49.180858: patient075_frame06, shape torch.Size([1, 14, 263, 197]), rank 0
+2026-02-18 22:09:50.023007: predicting patient076_frame01
+2026-02-18 22:09:50.116527: patient076_frame01, shape torch.Size([1, 8, 263, 263]), rank 0
+2026-02-18 22:09:51.101973: predicting patient076_frame12
+2026-02-18 22:09:51.165159: patient076_frame12, shape torch.Size([1, 8, 263, 263]), rank 0
+2026-02-18 22:09:52.179551: predicting patient080_frame01
+2026-02-18 22:09:52.242364: patient080_frame01, shape torch.Size([1, 6, 295, 249]), rank 0
+2026-02-18 22:09:53.011997: predicting patient080_frame10
+2026-02-18 22:09:53.061084: patient080_frame10, shape torch.Size([1, 6, 295, 249]), rank 0
+2026-02-18 22:09:53.816548: predicting patient082_frame01
+2026-02-18 22:09:53.896667: patient082_frame01, shape torch.Size([1, 16, 181, 263]), rank 0
+2026-02-18 22:09:54.905860: predicting patient082_frame07
+2026-02-18 22:09:54.989913: patient082_frame07, shape torch.Size([1, 16, 181, 263]), rank 0
+2026-02-18 22:09:56.032521: predicting patient095_frame01
+2026-02-18 22:09:56.122851: patient095_frame01, shape torch.Size([1, 14, 230, 185]), rank 0
+2026-02-18 22:09:56.553220: predicting patient095_frame12
+2026-02-18 22:09:56.618882: patient095_frame12, shape torch.Size([1, 14, 230, 185]), rank 0
+2026-02-18 22:09:57.054376: predicting patient096_frame01
+2026-02-18 22:09:57.134141: patient096_frame01, shape torch.Size([1, 18, 230, 192]), rank 0
+2026-02-18 22:09:57.706554: predicting patient096_frame08
+2026-02-18 22:09:57.781802: patient096_frame08, shape torch.Size([1, 18, 230, 192]), rank 0
+2026-02-18 22:09:58.338433: predicting patient100_frame01
+2026-02-18 22:09:58.388223: patient100_frame01, shape torch.Size([1, 8, 263, 187]), rank 0
+2026-02-18 22:09:58.815620: predicting patient100_frame13
+2026-02-18 22:09:58.866941: patient100_frame13, shape torch.Size([1, 8, 263, 187]), rank 0
+2026-02-18 22:09:59.321791: predicting patient107_frame01
+2026-02-18 22:09:59.375653: patient107_frame01, shape torch.Size([1, 9, 194, 230]), rank 0
+2026-02-18 22:09:59.840663: predicting patient107_frame10
+2026-02-18 22:09:59.886292: patient107_frame10, shape torch.Size([1, 9, 194, 230]), rank 0
+2026-02-18 22:10:00.349211: predicting patient109_frame01
+2026-02-18 22:10:00.395058: patient109_frame01, shape torch.Size([1, 8, 185, 230]), rank 0
+2026-02-18 22:10:00.808092: predicting patient109_frame10
+2026-02-18 22:10:00.852185: patient109_frame10, shape torch.Size([1, 8, 185, 230]), rank 0
+2026-02-18 22:10:01.261281: predicting patient113_frame01
+2026-02-18 22:10:01.310503: patient113_frame01, shape torch.Size([1, 10, 192, 230]), rank 0
+2026-02-18 22:10:01.812449: predicting patient113_frame08
+2026-02-18 22:10:01.863919: patient113_frame08, shape torch.Size([1, 10, 192, 230]), rank 0
+2026-02-18 22:10:02.364467: predicting patient114_frame01
+2026-02-18 22:10:02.430055: patient114_frame01, shape torch.Size([1, 11, 230, 194]), rank 0
+2026-02-18 22:10:02.712952: predicting patient114_frame11
+2026-02-18 22:10:02.780780: patient114_frame11, shape torch.Size([1, 11, 230, 194]), rank 0
+2026-02-18 22:10:03.067923: predicting patient129_frame01
+2026-02-18 22:10:03.133420: patient129_frame01, shape torch.Size([1, 17, 243, 167]), rank 0
+2026-02-18 22:10:03.586597: predicting patient129_frame08
+2026-02-18 22:10:03.659194: patient129_frame08, shape torch.Size([1, 17, 243, 167]), rank 0
+2026-02-18 22:10:04.092723: predicting patient132_frame01
+2026-02-18 22:10:04.159517: patient132_frame01, shape torch.Size([1, 10, 208, 230]), rank 0
+2026-02-18 22:10:04.668775: predicting patient132_frame15
+2026-02-18 22:10:04.827507: patient132_frame15, shape torch.Size([1, 10, 208, 230]), rank 0
+2026-02-18 22:10:05.321733: predicting patient138_frame01
+2026-02-18 22:10:05.376767: patient138_frame01, shape torch.Size([1, 9, 230, 194]), rank 0
+2026-02-18 22:10:05.621596: predicting patient138_frame10
+2026-02-18 22:10:05.679099: patient138_frame10, shape torch.Size([1, 9, 230, 194]), rank 0
+2026-02-18 22:10:05.920135: predicting patient146_frame01
+2026-02-18 22:10:05.972258: patient146_frame01, shape torch.Size([1, 9, 249, 226]), rank 0
+2026-02-18 22:10:06.440723: predicting patient146_frame10
+2026-02-18 22:10:06.492305: patient146_frame10, shape torch.Size([1, 9, 249, 226]), rank 0
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient032_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283D8D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient008_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient012_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E210): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient036_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155D80): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient013_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216410): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient042_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EE9F7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient009_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872A8F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient026_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient032_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155D80): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient013_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872A8F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient026_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EE9F7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient009_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216410): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient042_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283D8D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient008_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient012_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E210): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient036_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B250): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient026_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient036_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216D70): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient042_frame16.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient008_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient012_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B250): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient026_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient036_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EEA0330): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient009_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216D70): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient042_frame16.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient012_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient008_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EEA0330): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient009_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673940): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient032_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155D80): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient013_frame14.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673940): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient032_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155D80): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient013_frame14.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient047_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient044_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C610): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient046_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient056_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient047_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient044_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient056_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C610): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient046_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EE9F430): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient057_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155F60): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient061_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919155F60): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient061_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EE9F430): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient057_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient065_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient075_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient075_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient065_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872A8F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient047_frame09.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient065_frame14.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient046_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient044_frame11.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638217310): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient056_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872A8F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient047_frame09.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient046_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638217310): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient056_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient065_frame14.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient044_frame11.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient061_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient075_frame06.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient075_frame06.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient061_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient080_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA66740C0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient076_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient082_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA66740C0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient076_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient082_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient080_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient096_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient095_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient096_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient095_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient107_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (00000199191579A0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient100_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45E990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient107_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (00000199191579A0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient100_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EEA0330): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient057_frame09.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001FB1EEA0330): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient057_frame09.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient080_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient095_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient076_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673EE0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient076_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient095_frame12.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient080_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216D70): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient082_frame07.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A638216D70): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient082_frame07.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283CBB0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient096_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283CBB0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient096_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient107_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient107_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient100_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient100_frame13.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient109_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient109_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872ACB0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient114_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673B20): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient113_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872ACB0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient114_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA6673B20): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient113_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283D8D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient132_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient129_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283D8D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient132_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382169B0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient129_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient138_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient138_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient146_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019919157400): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient146_frame01.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient109_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000019E8F5DE990): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient109_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA66742A0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient113_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000029EA66742A0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient113_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient114_frame11.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000001F89872B9D0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient114_frame11.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient132_frame15.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A1A283C7F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient132_frame15.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382165F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient129_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (000002A6382165F0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient129_frame08.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient138_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (0000024DFA45DE50): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient138_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (00000199191568C0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient146_frame10.nii.gz has unexpected scales in sform
+
+WARNING: In D:\a\SimpleITK\SimpleITK\bld\ITK\Modules\IO\NIFTI\src\itkNiftiImageIO.cxx, line 2008
+NiftiImageIO (00000199191568C0): C:\Users\dimok\VSCodeProjects\digital_twin_project\nnunet_data\preprocessed\Dataset027_ACDC\gt_segmentations\patient146_frame10.nii.gz has unexpected scales in sform
+
+2026-02-18 22:10:18.752993: Validation complete
+2026-02-18 22:10:18.768665: Mean Validation Dice:  0.8910829956934966
+
+  2d / Fold 0 completed successfully.
+
+=== All training runs completed ===

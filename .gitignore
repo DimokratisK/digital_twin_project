@@ -32,5 +32,8 @@ preprocessed/
 *.nii
 *.nii.gz
 
+# nnU-Net data (raw, preprocessed, results — all large/generated)
+nnunet_data/
+
 # Jupyter
 .ipynb_checkpoints/
