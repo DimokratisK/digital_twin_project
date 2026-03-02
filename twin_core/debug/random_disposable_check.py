@@ -1,5 +1,11 @@
-import importlib
-module_name, class_name = "twin_core.utils.UNET_model.UNet".rsplit(".", 1)
-mod = importlib.import_module(module_name)
-cls = getattr(mod, class_name)
-print("Imported", cls, "from", mod.__file__)
+import nibabel as nib
+import numpy as np
+img = nib.load(r'C:\Users\dimok\Downloads\PhD\Digital Twin\Data\MM-WHS Multi-Modality Whole Heart Segmentation\MM-WHS 2017 Dataset\mr_train\mr_train_1010_label.nii.gz')
+data = np.asarray(img.dataobj)
+total = data.size
+n421 = np.sum(data == 421)
+n420 = np.sum(data == 420)
+print(f'Total voxels: {total:,}')
+print(f'LA voxels (420): {n420:,}')
+print(f'Stray voxels (421): {n421:,}')
+print(f'Ratio 421/420: {n421/max(n420,1)*100:.2f}%')

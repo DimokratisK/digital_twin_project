@@ -3,7 +3,7 @@
 #--------------
 
 # 1. Clone the repo
-git clone <repo_url>  #PLACEHOLDER URL FOR REPO URL
+git clone https://github.com/DimokratisK/digital_twin_project.git
 cd digital_twin_project
 git clone https://github.com/MIC-DKFZ/nnUNet.git nnUNet
 
@@ -14,15 +14,16 @@ git clone https://github.com/MIC-DKFZ/nnUNet.git nnUNet
 conda env create -f environment_nnunet.yml
 conda activate lab_venv_nnunet
 
-# 4. Install nnU-Net from the submodule
+# 4. Install nnU-Net from the cloned repo
 pip install -e ./nnUNet
 
-# 5. Copy the preprocessed data folder into place:
-#    nnunet_data/preprocessed/  ->  <project_root>/nnunet_data/preprocessed/
-#    (if using scratch disk, copy there instead and set the variable below)
+# 5. Copy the provided "nnunet_data" folder:
+#    - Default: paste into <project_root>/nnunet_data
+#    - Scratch disk: paste into /scratch/user/nnunet_data (or similar)
 
-# 6. If data lives on a scratch disk (otherwise skip — also needed in every new terminal session)
+# 6. If data lives on a scratch disk (must be set in every new terminal session):
 export NNUNET_DATA_ROOT=/scratch/user/nnunet_data
+
 
 
 #----------

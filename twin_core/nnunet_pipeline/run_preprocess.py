@@ -34,7 +34,6 @@ def main():
     print(f"\n=== Step 2/3: Planning experiments ===")
     plan_experiments(
         dataset_ids=[dataset_id],
-        configurations=("2d", "3d_fullres"),
         gpu_memory_target_in_gb=4,  # RTX 3050
     )
 
@@ -42,7 +41,7 @@ def main():
         print(f"\n=== Step 3/3: Preprocessing ===")
         preprocess(
             dataset_ids=[dataset_id],
-            configurations=("2d", "3d_fullres"),
+            Re
             num_processes=(2, 2),  # conservative for laptop
         )
     else:

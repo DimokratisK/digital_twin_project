@@ -35,5 +35,8 @@ preprocessed/
 # nnU-Net data (raw, preprocessed, results — all large/generated)
 nnunet_data/
 
+# Generated outputs (inference predictions, graphs, overlays)
+outputs/
+
 # Jupyter
 .ipynb_checkpoints/
