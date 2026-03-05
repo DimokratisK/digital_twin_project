@@ -41,7 +41,7 @@ def main():
         print(f"\n=== Step 3/3: Preprocessing ===")
         preprocess(
             dataset_ids=[dataset_id],
-            Re
+            configurations=["2d", "3d_fullres"],
             num_processes=(2, 2),  # conservative for laptop
         )
     else:

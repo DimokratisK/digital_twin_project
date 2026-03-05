@@ -1,0 +1,319 @@
+# Check mesh quality of a smoke test STL
+python -m twin_core.cfd_pipeline.prepare_cfd_mesh --check meshes/patient006_frame01/LV.stl
+
+# Generate an OpenFOAM case (just files, won't run solver)
+python -m twin_core.cfd_pipeline.run_openfoam \
+    --stl meshes/patient006_frame01/LV.stl \
+    --output cfd_results/patient006 --chamber lv --generate-only
+
+
+
+On the VM (after installing OpenFOAM), the full pipeline runs with one command:
+python -m twin_core.cfd_pipeline.run_openfoam \
+    --stl meshes/patient001/LA.stl \
+    --output cfd_results/patient001 --chamber la --num-cycles 5
+
+
+
+
+
+Papers:
+Masci et al. (2019) — patient-specific LA simulations with measured PV flows
+A Patient-Specific Computational Fluid Dynamics Model of the Left Atrium in Atrial Fibrillation - Development and Initial Evaluation
+Koizumi et al. (2015) — LA hemodynamics with specific BC values
+Otani et al. (2016) — computational LA flow analysis
+
+
+
+
+
+
+
+Read c:\Users\dimok\VSCodeProjects\digital_twin_project\Articles\A Computational Framework for Personalized Blood Flow Analysis in the Human Left Atrium - s10439-016-1590-x.pdf
+Article 1: Otani et al. (2016) — "A Computational Framework for Personalized Blood Flow Analysis in the Human Left Atrium"
+Key boundary condition values extracted:
+
+Blood Properties
+Density (ρ): 1.05 × 10³ kg/m³ = 1050 kg/m³ (not 1060 as I used)
+Dynamic viscosity (μ): 3.5 × 10⁻³ Pa·s = 0.0035 Pa·s (matches our file)
+Flow treated as laminar (Reynolds ~2400 and ~1100 at MV)
+Solver Setup
+Solver: OpenFOAM 2.3.1
+Time step: 1 × 10⁻⁴ s (matches our file)
+Total cycles computed: 5 (first 2 discarded as transient, last 3 analyzed)
+Convergence tolerance: velocity < 1×10⁻⁵, pressure < 1×10⁻⁸
+Boundary Conditions
+Wall motion: Prescribed from 4D CT (20 phases per cardiac cycle) — this is a moving wall approach, not fixed geometry with pulsatile inlet
+PV boundaries: Zero-gradient pressure; velocity determined by flow direction (zero-gradient for inflow, fixed flux for outflow)
+MV: Closed during systole (wall), open during diastole; flow calculated from LV volume change measured from CT
+Pressure at PV outlets: Total pressure (p + ½ρv·v) = 0
+Patient Data (Table 1)
+Case 1	Case 2
+Cycle length	0.82 s (~73 bpm)	0.82 s
+LA volume	96.8 mL	227.3 mL
+LAA volume	13.9 mL	8.47 mL
+LV volume	135 mL	160 mL
+Mesh
+Base element size: 1.5 mm
+Volumetric elements: ~367k (case 1), ~549k (case 2)
+Tetrahedral mesh
+Key Observations from Figures
+Fig. 3: LV volume change ~80-100 mL during diastole; LA volume change ~20-35 mL during reservoir phase
+Fig. 4: LAA velocity magnitudes range ±0.3 m/s (validated against TEE)
+Fig. 5: Streamline velocity magnitudes reach up to 0.5 m/s
+What this means for our pipeline
+This paper uses a fundamentally different approach than what we coded — they prescribe wall motion from 4D CT rather than fixed geometry with pulsatile inlet. However, the blood properties, time step, solver settings, and cycle count are directly usable. Notably, their density is 1050 kg/m³, not 1060.
+
+Ready for article 2.
+
+Go ahead.
+Read c:\Users\dimok\VSCodeProjects\digital_twin_project\Articles\Numerical analysis of hemodynamic changes in the left atrium due to atrial fibrilation - 1-s2.0-S0021929014006794-main.pdf
+Article 2: Koizumi et al. (2015) — "Numerical analysis of hemodynamic changes in the left atrium due to atrial fibrillation"
+Key boundary condition values extracted:
+
+Blood Properties
+Density (ρ): 1050 kg/m³ (same as Otani, confirms this is the standard)
+Dynamic viscosity (μ): 3.5 × 10⁻³ Pa·s = 0.0035 Pa·s (matches)
+Flow treated as Newtonian
+Boundary Conditions — PRESSURE-DRIVEN (different approach!)
+Diastole (0 ≤ t ≤ 0.33 s):
+PV inlets: constant pressure 10 mmHg
+MV outlet: constant pressure 8 mmHg
+Pressure difference (2 mmHg) + wall motion drives the flow
+Systole (0.33 < t ≤ 0.66 s):
+MV: solid wall (closed)
+PV inlets: constant pressure 10 mmHg
+Blood pumped into LA by wall motion
+Patient / Subject Data
+Healthy 23-year-old male volunteer
+Heart rate: 91 bpm (cardiac cycle T = 0.659 s)
+MV diameter: 24 mm (circular)
+PV cross-sectional areas: PV1=36.7, PV2=37.1, PV3=12.6, PV4=33.7 mm²
+MV cross-sectional area: 451.0 mm²
+LA volume range: ~22–43 mL (from Fig. 3)
+Solver Setup
+Solver: FLUENT 6.3 (commercial, not OpenFOAM)
+Time steps: 200 per cardiac cycle (Δt = 3.295 ms)
+Convergence residual: 10⁻⁴
+Total cycles: 4 (first ~1 discarded as transient, last cycle analyzed)
+Mesh: 149,330 tetrahedral elements
+Hemodynamic Results (Table 1 — very useful!)
+Parameter	Healthy (HA)	AF₀ (no kick)	AF₁ (no kick + fibrillation)
+E/A peak velocity ratio	1.40	2.47	2.13
+Mean blood flow volume (mL)	32.04	28.68	28.78
+TAWSS on LAA (Pa)	0.31	0.32	0.35
+OSI on LAA	0.12	0.12	0.20
+RRT on LAA (Pa⁻¹)	6.38	5.98	7.94
+TAWSS_min (Pa)	0.05	0.05	0.07
+OSI_max	0.43	0.42	0.47
+RRT_max (Pa⁻¹)	51.05	36.05	141.78
+Flow Rates from Figures
+MV peak flow (E-wave): ~140 mL/s (healthy)
+MV peak flow (A-wave): ~100 mL/s (healthy)
+PV4 peak flow: ~40-50 mL/s during systole
+PC MRI validation: Flow at PV4 qualitatively matched CFD
+Key Differences from Article 1
+Uses constant pressure BCs at PVs and MV (not velocity-based)
+Wall motion drives the flow (not fixed geometry with pulsatile inlet)
+Provides quantitative TAWSS, OSI, and RRT values — very useful for validating our pipeline output
+Confirms TAWSS on LAA is very low (~0.3 Pa) — this is a reference range for our results
+What this means for our pipeline
+Both articles so far use moving wall approaches with pressure BCs, not velocity-inlet BCs like our current pipeline
+Our fixed-geometry + pulsatile-velocity approach is a simplification but is commonly used when wall motion data isn't available (which is our case with static segmentation)
+The TAWSS/OSI/RRT values give us reference ranges to validate against
+Blood density should be 1050 kg/m³, not 1060 — both papers agree
+Ready for article 3.
+
+
+Read c:\Users\dimok\VSCodeProjects\digital_twin_project\Articles\A Patient-Specific Computational Fluid Dynamics Model of the Left Atrium in Atrial Fibrillation - Development and Initial Evaluation - chp3A10.10072F978-3-319-59448-4_37.pdf
+Article 3: Masci et al. (2017) — "A Patient-Specific Computational Fluid Dynamics Model of the Left Atrium in Atrial Fibrillation: Development and Initial Evaluation"
+
+This is a conference paper from FIMH 2017 (LNCS 10263, pp. 392–400). Key findings:
+
+Blood Properties
+Not explicitly stated in this paper — they reference Koizumi [8] for MV velocity profiles, so likely use the same values (1050 kg/m³, 0.0035 Pa·s), but it's not confirmed in the text.
+Solver Setup
+Solver: LifeV (finite element library from EPFL), NOT OpenFOAM or FLUENT
+Formulation: Incompressible Navier-Stokes in ALE (Arbitrary Lagrangian Eulerian) frame — this is key, it's a moving-mesh formulation
+Spatial discretization: P1-P1 Galerkin FE with VMS-SUPG stabilization
+Temporal discretization: 2nd order semi-implicit BDF (backward differentiation formula)
+Cycles simulated: 3 total, results reported from 3rd cycle only (first 2 discarded as transient)
+Boundary Conditions — Mass-Balance Approach
+This paper uses a more sophisticated BC strategy than the previous two:
+
+Start with a representative MV flow rate Q_O = v_MV × A_MV (from PW Doppler, taken from Koizumi's literature values since patient-specific Doppler wasn't available)
+PV flow rates computed by mass balance: Q_pv1 + Q_pv2 + Q_pv3 + Q_pv4 + Q_O + Q_wall = 0
+Q_wall = dV/dt (flux from LA volume change due to wall motion)
+Individual PV flows distributed proportional to cross-sectional area: Q_pv_l = (A_l / A_total) × Q_pv_total - Q_w_l
+Parabolic velocity profile imposed at each PV
+Natural boundary conditions with backflow penalization at MV
+Patient Data
+2 AF patients (retrospective)
+CT: Philips Brilliance 64, 10 volumes per cardiac cycle, 170 axial slices, 0.4mm pixel, 1mm slice thickness
+Motion extracted via elastic image registration (Elastix), with Fourier interpolation for temporal upsampling
+Mesh
+Patient 1: 170,428 nodes, 1,042,766 tetrahedra (~1M elements — close to our 1.5M target)
+Tetrahedral mesh (generated with VMTK)
+HC Laplacian smoothing applied
+Key Hemodynamic Results (from Fig. 3)
+MV E-wave peak velocity: 65–70 cm/s (both SR and AF)
+MV A-wave peak velocity: 35–40 cm/s (SR only, absent in AF)
+PV velocity during LV systole: ~20 cm/s (SR), near zero in AF
+PV velocity during LV filling: ~40 cm/s mean
+MV flow rate peaks at ~200 mL/s (from Fig. 3 y-axis)
+Blood Stasis (LAA Washout) — Table 1
+After 3 cardiac cycles, particles remaining in LAA:
+
+Patient 1 SR	Patient 1 AF	Patient 2 SR	Patient 2 AF
+After 3 cycles	26%	45%	39%	50%
+This confirms AF reduces LAA washout significantly.
+
+What This Means for Our Pipeline
+Mass-balance BC approach is more physically realistic than our simple velocity-inlet — worth considering as an upgrade
+The PV flow split should be proportional to PV cross-sectional area, not fixed percentages as we currently have (our 28/27/24/21% split is a reasonable approximation if patient-specific areas aren't available)
+~1M tetrahedral elements is a good reference — our 1.5M target is in the right ballpark
+3 cycles minimum for transient washout (we use 5, which is fine)
+This paper doesn't report TAWSS/OSI values directly — it focuses on particle-based blood stasis instead
+Ready for article 4.
+
+Go ahead.
+Read c:\Users\dimok\VSCodeProjects\digital_twin_project\Articles\A reduced order model formulation for left atrium flow - an atrial fibrillation case - 10237_2024_Article_1847.pdf
+Article 4: Balzotti et al. (2024) — "A reduced order model formulation for left atrium flow: an atrial fibrillation case"
+
+This is a recent paper from Biomechanics and Modeling in Mechanobiology (2024). It's the most modern of the articles so far and very relevant — it uses OpenFOAM with a rigid wall approach, which is closest to what our pipeline does.
+
+Blood Properties
+Density (ρ): 1050 kg/m³ (again confirms the consensus)
+Dynamic viscosity (μ): 0.0035 Pa·s (Newtonian model)
+Also tests non-Newtonian Casson's model with parameters:
+Plasma viscosity η ∈ [1.5e-03, 1.7e-03] Pa·s
+Hematocrit H ∈ [35, 50]%
+Yield stress τ_y = (a₁ + a₂H)³ where a₁=0, a₂=0.290 Pa^(1/3)
+Solver Setup
+Solver: OpenFOAM 2206 (directly relevant to our pipeline!)
+Spatial discretization: 2nd-order Gauss linearUpwind scheme
+Temporal discretization: 1st-order Euler implicit
+Flow assumption: Laminar (DNS, not turbulent) — justified by Dueñas-Pamplona et al. (2022) showing negligible differences between turbulent and non-turbulent mean flow fields
+Time step: Δt = 0.01 s max, with max Courant number 0.8
+Cardiac cycle: T = 1.07 s
+Cycles simulated: 4 total, results from 4th cycle only (first 3 discarded as transient)
+Snapshots collected: 107 per cardiac cycle
+Boundary Conditions — RIGID WALL + VELOCITY SCALING
+This is the most similar approach to ours:
+
+Walls: completely rigid — justified because in AF with impaired function, rigid and moving wall simulations give very similar flow patterns and residence time distributions (citing García-Isla 2018, Dueñas-Pamplona 2021)
+MV outlet: Doppler-derived velocity waveform, scaled by a factor f ∈ [0.5, 1.5] to study varying cardiac output
+PV inlets: Each PV carries equal flow rate (uniform split, not proportional to area)
+MV flow rate peaks: ~350 mL/s at scaling factor 1.5 (from Fig. 1), ~230 mL/s at f=1.0
+Mesh
+542,560 tetrahedral cells (volume), 79,708 boundary cells
+Grid convergence study performed with 4 grids (88k to 1.2M cells)
+Grid 2 (542k) shown to be mesh-independent via GCI analysis
+Hemodynamic Indices Computed
+TAWSS (time-averaged WSS) — low values = stasis regions
+OSI (oscillatory shear index) — 0 to 0.5
+Blood age distribution (mean age m₁) — higher values = stasis
+Washout (φ) — residual scalar tracer, high values = stasis
+TAWSS scale from figures: ~1e-04 to 3e-04 Pa on LAA (very low, consistent with Koizumi's ~0.31 Pa on LAA)
+OSI scale: ~0.005 to 0.5 on LAA
+Key Findings
+Rigid wall is justified for AF — this is important validation for our approach
+Cardiac output (scaling factor) has enormous influence on blood age indices
+Newtonian vs non-Newtonian: Casson's model shows similar patterns to Newtonian for most indices, with more pronounced differences in OSI distribution. For their case, the introduction of Casson's model was "not justified"
+Blood stasis highest at LAA tip — the most isolated zone, hardest to wash
+PV orientation plays relatively minor role compared to cardiac output
+What This Means for Our Pipeline
+Our rigid-wall approach is validated — this paper explicitly justifies it for AF cases with impaired atrial function
+OpenFOAM is confirmed as an appropriate solver for this problem (they use OpenFOAM 2206)
+Equal PV flow split is used here (simpler than our 28/27/24/21% or Masci's area-proportional approach) — all three are reasonable
+Laminar flow assumption is fine — no need for turbulence modeling
+Time step of 0.01s is much larger than our 1e-4s — we might be overly conservative (though they use Courant-limited adaptive stepping)
+4 cycles with 3 discarded as transient — our 5 cycles with 1 discarded seems reasonable
+Blood age / washout metrics are important additions we should consider implementing (currently we only compute TAWSS and OSI)
+TAWSS values on LAA are very low (order 1e-4 Pa from their color scale) — this is important reference data
+Ready for article 5.
+
+Read c:\Users\dimok\VSCodeProjects\digital_twin_project\Articles\VJST+(2024)+(3)+18_TH-18503_MEC_+revised+paper+-+Hemodynamics+in+Coronary+Arteries+(MEC+Đ+D+04-06-24)+(1).pdf
+Article 5: Nguyen et al. (2024) — "Hemodynamics in Coronary Arteries: using Open-Source Software-SimVascular to Investigate the Hemodynamics in Coronary Arteries of the Patient-Specific Modeling"
+
+This is a VJST (Vietnam Journal of Science and Technology) paper. It's about coronary arteries, not the left atrium, and uses SimVascular rather than OpenFOAM. Less directly relevant to our LA CFD pipeline, but useful for the SimVascular baseline we planned.
+
+Blood Properties
+Density (ρ): 1.06 g/cm³ = 1060 kg/m³ (note: this is the outlier — all LA papers use 1050)
+Dynamic viscosity (μ): 0.04 dynes/cm² = 0.004 Pa·s (slightly different from the 0.0035 Pa·s used in all LA papers)
+Vessel wall density (ρˢ): 1.0 g/cm³
+Flow treated as Newtonian
+Solver Setup
+Solver: SimVascular (PHASTA-based finite element solver)
+Method: SUPG/PSPG stabilized FE formulation
+Fluid-structure interaction: Coupled momentum method (fixed fluid mesh with wall displacement)
+Convergence: Solutions run until pressure fields differ by <1% from previous cardiac cycle
+Hardware: Dell M4800 workstation, Intel i7, 2.4 GHz, 8 CPU, 8 GB RAM
+Mesh
+58,382 nodes, 301,387 elements, 58,647 edges, 39,098 faces
+Tetrahedral elements
+Wall refinement for boundary layer resolution
+Boundary Conditions — Lumped Parameter (0D) Models
+Aortic inlet: Prescribed flow rate waveform from PC-MRI, mean ~100 mL/s
+Aortic outlet: 3-element RCR Windkessel model (R_d=1421.86, R_p=140.63, C=0.001 cm²/dyne)
+Coronary outlets: Specialized lumped parameter model with:
+Coronary arterial resistance (R_a)
+Coronary arterial compliance (C_a)
+Microcirculation resistance (R_a-micro)
+Myocardial compliance (C_im)
+Venous microcirculation resistance (R_v-micro)
+Venous resistance (R_μ)
+Intramyocardial pressure P_im(t)
+4% rule: Mean coronary flow = 4% of cardiac output
+Murray's law governs hemodynamics inside coronary arteries
+Key Results
+Aortic inlet pressure: 80–120 mmHg (normal)
+Left coronary: mean systolic flow 0.85 cc/s, diastolic peak 2 cc/s
+Right coronary: smaller flow rates
+WSS highest at coronary branch endpoints and shape change locations (0–30 dynes/cm²)
+Flow velocity: up to 50 cm/s in coronary branches
+What This Means for Our Pipeline
+Different anatomy (coronary arteries, not LA) — limited direct relevance to our LA CFD
+Blood properties differ slightly: ρ=1060 vs 1050 in LA papers, μ=0.004 vs 0.0035. This is because coronary artery studies sometimes use slightly different values. For LA, we should stick with 1050 kg/m³ and 0.0035 Pa·s as the 4 LA-specific papers all agree on these
+SimVascular workflow demonstrated: Shows the full pipeline from DICOM → segmentation → mesh → simulation → WSS analysis. Useful reference for when we set up the SimVascular baseline
+Lumped parameter BCs are SimVascular's strength — the coronary BC model with intramyocardial pressure is much more sophisticated than what OpenFOAM offers out of the box
+Modest mesh size (300k elements) was sufficient for coronary arteries — smaller domain than LA
+
+
+
+
+
+Summary Across All 5 Articles
+Here's a consolidated comparison table:
+
+Parameter	Art.1 (Otani)	Art.2 (Koizumi)	Art.3 (Masci)	Art.4 (Balzotti)	Art.5 (Nguyen)
+Anatomy	LA	LA	LA	LA (LAA focus)	Coronary
+ρ (kg/m³)	1050	1050	(not stated)	1050	1060
+μ (Pa·s)	0.0035	0.0035	(not stated)	0.0035	0.004
+Solver	OpenFOAM 2.3	FLUENT 6.3	LifeV (FE)	OpenFOAM 2206	SimVascular
+Wall	Moving (4D CT)	Moving (prescribed)	Moving (ALE)	Rigid	Fixed+CMM
+Mesh cells	~367-549k	~149k	~1M	~543k	~301k
+dt	1e-4 s	3.3e-3 s	(not stated)	0.01 s (max)	(not stated)
+Cycles	5 (last 3 used)	4 (last used)	3 (last used)	4 (last used)	until converged
+Flow model	Laminar	Laminar	Laminar	Laminar	Newtonian
+TAWSS on LAA	—	~0.31 Pa	—	~1e-4 Pa	—
+OSI on LAA	—	~0.12	—	~0–0.5	—
+Key Takeaways for Updating Our Pipeline:
+Change BLOOD_DENSITY from 1060 to 1050 kg/m³ — consensus from all 4 LA papers
+Keep μ = 0.0035 Pa·s — confirmed across all LA papers
+Our rigid-wall approach is validated by Balzotti et al. (2024) for AF cases
+Our OpenFOAM choice is validated — used in 2 of 4 LA papers
+Laminar flow is appropriate — no turbulence modeling needed
+Consider adding blood age/washout metrics — important for stroke risk (Balzotti)
+PV flow split options: equal (Balzotti), area-proportional (Masci), or fixed percentages (ours) — all are reasonable approximations
+Our 5 cycles with 1 discarded is within the range of the literature (3–5 cycles, 1–3 discarded)
+
+
+
+
+
+
+update boundary_conditions.py with the validated values
+
+
+I want the summary table with all the relevant/necessary details, and also a legend or a note with the full names and DOI of each referenced article, so that I can cite them later. Things need to be clean and academically correct

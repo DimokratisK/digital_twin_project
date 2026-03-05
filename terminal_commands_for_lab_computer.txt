@@ -31,6 +31,8 @@ export NNUNET_DATA_ROOT=/scratch/user/nnunet_data
 #----------
 
 python -m twin_core.nnunet_pipeline.run_training --profile full
+python -m twin_core.nnunet_pipeline.run_training --profile full --dataset_id 27
+
 
 
 #---------------
@@ -38,3 +40,5 @@ python -m twin_core.nnunet_pipeline.run_training --profile full
 #---------------
 
 python -m twin_core.nnunet_pipeline.run_find_best_config
+python -m twin_core.nnunet_pipeline.run_find_best_config --dataset_id 27
+
