@@ -1,11 +1,13 @@
-import nibabel as nib
-import numpy as np
-img = nib.load(r'C:\Users\dimok\Downloads\PhD\Digital Twin\Data\MM-WHS Multi-Modality Whole Heart Segmentation\MM-WHS 2017 Dataset\mr_train\mr_train_1010_label.nii.gz')
-data = np.asarray(img.dataobj)
-total = data.size
-n421 = np.sum(data == 421)
-n420 = np.sum(data == 420)
-print(f'Total voxels: {total:,}')
-print(f'LA voxels (420): {n420:,}')
-print(f'Stray voxels (421): {n421:,}')
-print(f'Ratio 421/420: {n421/max(n420,1)*100:.2f}%')
+import trimesh
+from pathlib import Path
+
+meshdir = Path(r'c:\Users\dimok\VSCodeProjects\digital_twin_project\test_4d_meshes')
+for frame_dir in sorted(meshdir.iterdir()):
+    if not frame_dir.is_dir():
+        continue
+    for struct in ['RV', 'MYO', 'LV']:
+        stl = frame_dir / f'{struct}.stl'
+        if stl.exists():
+            m = trimesh.load(str(stl))
+            wt = 'OK' if m.is_watertight else 'HOLES'
+            print(f'{frame_dir.name}/{struct}: faces={len(m.faces):6d}  {wt}')

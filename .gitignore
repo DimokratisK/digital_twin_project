@@ -38,5 +38,8 @@ nnunet_data/
 # Generated outputs (inference predictions, graphs, overlays)
 outputs/
 
+# Mesh outputs
+test_4d_meshes/
+
 # Jupyter
 .ipynb_checkpoints/
