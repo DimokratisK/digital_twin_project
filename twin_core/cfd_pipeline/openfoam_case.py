@@ -76,22 +76,30 @@ def generate_block_mesh_dict(bbox: Dict, cell_size: float = 2.0) -> str:
     ny = max(1, int(np.ceil((ymax - ymin) / cell_size)))
     nz = max(1, int(np.ceil((zmax - zmin) / cell_size)))
 
+    # Convert bounding box from mm to metres
+    xmin_m = xmin * 0.001
+    ymin_m = ymin * 0.001
+    zmin_m = zmin * 0.001
+    xmax_m = xmax * 0.001
+    ymax_m = ymax * 0.001
+    zmax_m = zmax * 0.001
+
     header = _OPENFOAM_HEADER.format(
         class_name="dictionary", object_name="blockMeshDict"
     )
     return f"""{header}
-scale 0.001;  // mm to meters
+// Coordinates in metres (STL is also scaled to metres)
 
 vertices
 (
-    ({xmin:.4f} {ymin:.4f} {zmin:.4f})
-    ({xmax:.4f} {ymin:.4f} {zmin:.4f})
-    ({xmax:.4f} {ymax:.4f} {zmin:.4f})
-    ({xmin:.4f} {ymax:.4f} {zmin:.4f})
-    ({xmin:.4f} {ymin:.4f} {zmax:.4f})
-    ({xmax:.4f} {ymin:.4f} {zmax:.4f})
-    ({xmax:.4f} {ymax:.4f} {zmax:.4f})
-    ({xmin:.4f} {ymax:.4f} {zmax:.4f})
+    ({xmin_m:.6f} {ymin_m:.6f} {zmin_m:.6f})
+    ({xmax_m:.6f} {ymin_m:.6f} {zmin_m:.6f})
+    ({xmax_m:.6f} {ymax_m:.6f} {zmin_m:.6f})
+    ({xmin_m:.6f} {ymax_m:.6f} {zmin_m:.6f})
+    ({xmin_m:.6f} {ymin_m:.6f} {zmax_m:.6f})
+    ({xmax_m:.6f} {ymin_m:.6f} {zmax_m:.6f})
+    ({xmax_m:.6f} {ymax_m:.6f} {zmax_m:.6f})
+    ({xmin_m:.6f} {ymax_m:.6f} {zmax_m:.6f})
 );
 
 blocks
@@ -128,21 +136,84 @@ mergePatchPairs
 
 def generate_snappy_hex_mesh_dict(
     stl_filename: str,
+    bbox: Dict,
     refinement_level: int = 3,
     n_surface_layers: int = 3,
+    multi_region: bool = False,
 ) -> str:
     """Generate snappyHexMeshDict for STL-to-volume mesh conversion.
 
     Parameters
     ----------
     stl_filename : name of STL file in constant/triSurface/
+    bbox : bounding box dict (mm units, will be converted to metres)
     refinement_level : number of refinement levels near surface
     n_surface_layers : number of boundary layer cells
+    multi_region : if True, STL has named regions (wall, inlet, outlet)
     """
     surface_name = Path(stl_filename).stem
     header = _OPENFOAM_HEADER.format(
         class_name="dictionary", object_name="snappyHexMeshDict"
     )
+
+    # Geometry section — with or without named regions
+    if multi_region:
+        geometry_block = f"""    {stl_filename}
+    {{
+        type triSurfaceMesh;
+        name {surface_name};
+        regions
+        {{
+            wall   {{ name wall; }}
+            inlet  {{ name inlet; }}
+            outlet {{ name outlet; }}
+        }}
+    }}"""
+        refinement_block = f"""        {surface_name}
+        {{
+            level ({refinement_level} {refinement_level});
+            regions
+            {{
+                wall
+                {{
+                    level ({refinement_level} {refinement_level});
+                    patchInfo {{ type wall; }}
+                }}
+                inlet
+                {{
+                    level ({refinement_level} {refinement_level});
+                    patchInfo {{ type patch; }}
+                }}
+                outlet
+                {{
+                    level ({refinement_level} {refinement_level});
+                    patchInfo {{ type patch; }}
+                }}
+            }}
+        }}"""
+        layers_block = f"""        "wall"
+        {{
+            nSurfaceLayers {n_surface_layers};
+        }}"""
+    else:
+        geometry_block = f"""    {stl_filename}
+    {{
+        type triSurfaceMesh;
+        name {surface_name};
+    }}"""
+        refinement_block = f"""        {surface_name}
+        {{
+            level ({refinement_level} {refinement_level});
+            patchInfo
+            {{
+                type wall;
+            }}
+        }}"""
+        layers_block = f"""        {surface_name}
+        {{
+            nSurfaceLayers {n_surface_layers};
+        }}"""
+
     return f"""{header}
 castellatedMesh true;
 snap            true;
@@ -150,11 +221,7 @@ addLayers       true;
 
 geometry
 {{
-    {stl_filename}
-    {{
-        type triSurfaceMesh;
-        name {surface_name};
-    }}
+{geometry_block}
 }};
 
 castellatedMeshControls
@@ -171,14 +238,7 @@ castellatedMeshControls
 
     refinementSurfaces
     {{
-        {surface_name}
-        {{
-            level ({refinement_level} {refinement_level});
-            patchInfo
-            {{
-                type wall;
-            }}
-        }}
+{refinement_block}
     }};
 
     resolveFeatureAngle 30;
@@ -187,7 +247,7 @@ castellatedMeshControls
     {{
     }};
 
-    locationInMesh (0 0 0);  // Point inside the mesh (will be updated)
+    locationInMesh ({bbox['center'][0] * 0.001:.6f} {bbox['center'][1] * 0.001:.6f} {bbox['center'][2] * 0.001:.6f});
     allowFreeStandingZoneFaces true;
 }};
 
@@ -208,10 +268,7 @@ addLayersControls
     relativeSizes   true;
     layers
     {{
-        {surface_name}
-        {{
-            nSurfaceLayers {n_surface_layers};
-        }}
+{layers_block}
     }};
 
     expansionRatio  1.2;
@@ -603,10 +660,36 @@ def create_openfoam_case(
     print(f"  Processors: {n_processors}")
     print()
 
-    # Copy STL to case
+    # Copy STL to case — check if it's already a multi-region STL (in metres)
+    # or a raw STL that needs scaling
     tri_surface_dir = case_dir / "constant" / "triSurface"
     tri_surface_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(str(stl_path), str(tri_surface_dir / stl_filename))
+    dest_stl = tri_surface_dir / stl_filename
+
+    # Check if STL has named regions (multi-region from cut_valve_openings.py)
+    is_multi_region = False
+    with open(stl_path, "r", errors="ignore") as f:
+        header = f.read(1024)
+        # Multi-region STLs from our pipeline have "solid wall", "solid inlet", etc.
+        if "solid inlet" in header or "solid outlet" in header:
+            is_multi_region = True
+
+    if is_multi_region:
+        # Already processed (scaled to metres, has named regions) — copy as-is
+        shutil.copy2(str(stl_path), str(dest_stl))
+        print("  STL: multi-region (inlet/outlet/wall), already in metres")
+    else:
+        # Raw STL from segmentation (mm units) — scale to metres
+        try:
+            import trimesh
+            mesh = trimesh.load(str(stl_path), force="mesh")
+            mesh.vertices *= 0.001  # mm → m
+            mesh.export(str(dest_stl))
+            print("  STL: scaled from mm to metres")
+        except ImportError:
+            # Fallback: copy as-is and rely on blockMeshDict scale
+            shutil.copy2(str(stl_path), str(dest_stl))
+            print("  STL: copied without scaling (trimesh not available)")
 
     # Write inlet waveform
     waveform_path = case_dir / "constant" / "inlet_waveform.csv"
@@ -623,7 +706,7 @@ def create_openfoam_case(
     )
     _write_file(
         system_dir / "snappyHexMeshDict",
-        generate_snappy_hex_mesh_dict(stl_filename, refinement_level, n_surface_layers),
+        generate_snappy_hex_mesh_dict(stl_filename, bbox, refinement_level, n_surface_layers, multi_region=is_multi_region),
     )
     _write_file(
         system_dir / "controlDict",

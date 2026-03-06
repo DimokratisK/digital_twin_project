@@ -132,16 +132,18 @@ def run_full_pipeline(
 
     Steps:
     1. Prepare STL mesh for CFD (repair, smooth)
-    2. Generate OpenFOAM case directory
-    3. Run meshing (blockMesh + snappyHexMesh)
-    4. Run solver (pimpleFoam)
-    5. Post-process (WSS extraction)
+    2. Cut valve openings (create multi-region STL with inlet/outlet/wall)
+    3. Generate OpenFOAM case directory
+    4. Run meshing (blockMesh + snappyHexMesh)
+    5. Run solver (pimpleFoam)
+    6. Post-process (WSS extraction)
     """
     from twin_core.cfd_pipeline.prepare_cfd_mesh import (
         check_mesh_quality,
         repair_for_cfd,
         print_quality_report,
     )
+    from twin_core.cfd_pipeline.cut_valve_openings import prepare_valve_stl
     from twin_core.cfd_pipeline.openfoam_case import create_openfoam_case
 
     stl_path = Path(stl_path)
@@ -153,7 +155,7 @@ def run_full_pipeline(
 
     # Step 1: Check/prepare mesh
     if not skip_mesh_prep:
-        print(f"\n=== Step 1/5: Preparing mesh for CFD ===")
+        print(f"\n=== Step 1/6: Preparing mesh for CFD ===")
         report = check_mesh_quality(str(stl_path))
         print_quality_report(report)
 
@@ -170,10 +172,20 @@ def run_full_pipeline(
         else:
             print("Mesh is CFD-ready.")
     else:
-        print(f"\n=== Step 1/5: Skipping mesh preparation ===")
+        print(f"\n=== Step 1/6: Skipping mesh preparation ===")
 
-    # Step 2: Generate OpenFOAM case
-    print(f"\n=== Step 2/5: Generating OpenFOAM case ===")
+    # Step 2: Cut valve openings (create multi-region STL)
+    print(f"\n=== Step 2/6: Identifying valve regions ===")
+    valve_stl = output_dir / "valve_mesh" / (stl_path.stem + "_valves.stl")
+    prepare_valve_stl(
+        stl_path=str(stl_path),
+        output_path=str(valve_stl),
+        scale_to_metres=True,
+    )
+    stl_path = valve_stl
+
+    # Step 3: Generate OpenFOAM case
+    print(f"\n=== Step 3/6: Generating OpenFOAM case ===")
     case_dir = output_dir / "case"
     create_openfoam_case(
         stl_path=str(stl_path),
@@ -198,18 +210,18 @@ def run_full_pipeline(
         print("You can run manually after installing OpenFOAM.")
         sys.exit(1)
 
-    # Step 3: Meshing
-    print(f"\n=== Step 3/5: Meshing ===")
+    # Step 4: Meshing
+    print(f"\n=== Step 4/6: Meshing ===")
     if not run_meshing(str(case_dir)):
         sys.exit(1)
 
-    # Step 4: Solver
-    print(f"\n=== Step 4/5: Running solver ===")
+    # Step 5: Solver
+    print(f"\n=== Step 5/6: Running solver ===")
     if not run_solver(str(case_dir), n_processors):
         sys.exit(1)
 
-    # Step 5: Post-processing
-    print(f"\n=== Step 5/5: Post-processing ===")
+    # Step 6: Post-processing
+    print(f"\n=== Step 6/6: Post-processing ===")
     if not run_postprocess(str(case_dir)):
         sys.exit(1)
 
