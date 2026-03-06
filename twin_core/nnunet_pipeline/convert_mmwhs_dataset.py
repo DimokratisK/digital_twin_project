@@ -1,19 +1,19 @@
 """
-Convert MM-WHS (Multi-Modality Whole Heart Segmentation) MRI dataset to nnU-Net v2 format.
+Convert MM-WHS (Multi-Modality Whole Heart Segmentation) dataset to nnU-Net v2 format.
 
-The MM-WHS dataset uses non-standard label values (205, 420, 500, etc.)
-which must be remapped to contiguous integers (1-7) for nnU-Net.
+Supports both MRI and CT modalities. The MM-WHS dataset uses non-standard label
+values (205, 420, 500, etc.) which must be remapped to contiguous integers (1-7)
+for nnU-Net. The label mapping is identical for both modalities.
 
 Source structure:
-    mr_train/
-        mr_train_1001_image.nii.gz
-        mr_train_1001_label.nii.gz
-        ...
-        mr_train_1020_image.nii.gz
-        mr_train_1020_label.nii.gz
+    mr_train/                          ct_train/
+        mr_train_1001_image.nii.gz         ct_train_1001_image.nii.gz
+        mr_train_1001_label.nii.gz         ct_train_1001_label.nii.gz
+        ...                                ...
 
 Target structure (nnU-Net v2):
-    nnunet_data/raw/Dataset028_MMWHS/
+    nnunet_data/raw/Dataset028_MMWHS/  (MRI, default)
+    nnunet_data/raw/Dataset029_MMWHS_CT/  (CT)
         imagesTr/
             mmwhs_1001_0000.nii.gz
             ...
@@ -23,13 +23,19 @@ Target structure (nnU-Net v2):
         dataset.json
 
 Usage:
+    # MRI (default):
     python -m twin_core.nnunet_pipeline.convert_mmwhs_dataset \
         --dataset_root "C:\...\MM-WHS 2017 Dataset\mr_train"
 
+    # CT:
+    python -m twin_core.nnunet_pipeline.convert_mmwhs_dataset \
+        --dataset_root "C:\...\MM-WHS 2017 Dataset\ct_train" \
+        --modality ct --dataset_id 29
+
     # Smoke test (only 5 patients):
     python -m twin_core.nnunet_pipeline.convert_mmwhs_dataset \
-        --dataset_root "C:\...\MM-WHS 2017 Dataset\mr_train" \
-        --smoke_test 5
+        --dataset_root "C:\...\MM-WHS 2017 Dataset\ct_train" \
+        --modality ct --dataset_id 29 --smoke_test 5
 """
 
 import argparse
@@ -94,32 +100,56 @@ def remap_labels(label_path: Path, output_path: Path):
     nib.save(out_img, str(output_path))
 
 
+MODALITY_CONFIG = {
+    "mr": {
+        "file_prefix": "mr_train",
+        "channel_name": "bSSFP_MRI",
+        "dataset_suffix": "MMWHS",
+        "description_modality": "MRI",
+    },
+    "ct": {
+        "file_prefix": "ct_train",
+        "channel_name": "CT",
+        "dataset_suffix": "MMWHS_CT",
+        "description_modality": "CT",
+    },
+}
+
+
 def convert_mmwhs(
     dataset_root: str,
     dataset_id: int = 28,
+    modality: str = "mr",
     smoke_test: Optional[int] = None,
 ):
     """
-    Convert MM-WHS MRI dataset to nnU-Net v2 format.
+    Convert MM-WHS dataset to nnU-Net v2 format.
 
     Args:
-        dataset_root: Path to the mr_train folder containing *_image.nii.gz and *_label.nii.gz files.
-        dataset_id: nnU-Net dataset ID (default: 28).
+        dataset_root: Path to the mr_train or ct_train folder.
+        dataset_id: nnU-Net dataset ID (default: 28 for MRI, 29 for CT).
+        modality: 'mr' or 'ct'.
         smoke_test: If set, only convert this many patients.
     """
+    if modality not in MODALITY_CONFIG:
+        raise ValueError(f"Unknown modality: {modality}. Use 'mr' or 'ct'.")
+
+    cfg = MODALITY_CONFIG[modality]
+    file_prefix = cfg["file_prefix"]
+
     dataset_root = Path(dataset_root)
-    dataset_name = f"Dataset{dataset_id:03d}_MMWHS"
+    dataset_name = f"Dataset{dataset_id:03d}_{cfg['dataset_suffix']}"
 
     out_dir = Path(nnUNet_raw) / dataset_name
     out_images_tr = out_dir / "imagesTr"
     out_labels_tr = out_dir / "labelsTr"
 
     # Discover patients
-    image_files = sorted(dataset_root.glob("mr_train_*_image.nii.gz"))
+    image_files = sorted(dataset_root.glob(f"{file_prefix}_*_image.nii.gz"))
     if not image_files:
         raise FileNotFoundError(
-            f"No mr_train_*_image.nii.gz files found in {dataset_root}. "
-            f"Make sure --dataset_root points to the mr_train folder."
+            f"No {file_prefix}_*_image.nii.gz files found in {dataset_root}. "
+            f"Make sure --dataset_root points to the {file_prefix} folder."
         )
 
     total_found = len(image_files)
@@ -127,7 +157,7 @@ def convert_mmwhs(
         image_files = image_files[:smoke_test]
         print(f"SMOKE TEST: using {len(image_files)} of {total_found} patients")
     else:
-        print(f"Found {total_found} patients")
+        print(f"Found {total_found} patients ({cfg['description_modality']})")
 
     # Clean previous conversion if exists
     if out_dir.exists():
@@ -141,11 +171,11 @@ def convert_mmwhs(
     num_training_cases = 0
 
     for img_file in image_files:
-        # Extract patient ID: mr_train_1001_image.nii.gz → 1001
+        # Extract patient ID: {prefix}_1001_image.nii.gz → 1001
         patient_id = img_file.name.split("_")[2]
         case_id = f"mmwhs_{patient_id}"
 
-        label_file = dataset_root / f"mr_train_{patient_id}_label.nii.gz"
+        label_file = dataset_root / f"{file_prefix}_{patient_id}_label.nii.gz"
         if not label_file.exists():
             print(f"  WARNING: No label for patient {patient_id}, skipping")
             continue
@@ -162,13 +192,13 @@ def convert_mmwhs(
     # Generate dataset.json
     generate_dataset_json(
         str(out_dir),
-        channel_names={0: "bSSFP_MRI"},
+        channel_names={0: cfg["channel_name"]},
         labels=LABEL_NAMES,
         num_training_cases=num_training_cases,
         file_ending=".nii.gz",
-        dataset_name="MMWHS",
+        dataset_name=cfg["dataset_suffix"],
         description=(
-            f"MM-WHS 2017 whole heart MRI segmentation - "
+            f"MM-WHS 2017 whole heart {cfg['description_modality']} segmentation - "
             f"{num_training_cases} patients, 7 structures"
         ),
         license="See MM-WHS challenge terms (registration required)",
@@ -177,6 +207,7 @@ def convert_mmwhs(
     )
 
     print(f"\nConversion complete:")
+    print(f"  Modality: {cfg['description_modality']}")
     print(f"  Patients: {num_training_cases}")
     print(f"  Output: {out_dir}")
     print(f"  Structures: {list(LABEL_NAMES.keys())}")
@@ -187,15 +218,19 @@ def convert_mmwhs(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert MM-WHS MRI dataset to nnU-Net v2 format"
+        description="Convert MM-WHS dataset (MRI or CT) to nnU-Net v2 format"
     )
     parser.add_argument(
         "--dataset_root", type=str, required=True,
-        help="Path to the mr_train folder"
+        help="Path to the mr_train or ct_train folder"
     )
     parser.add_argument(
-        "--dataset_id", type=int, default=28,
-        help="nnU-Net dataset ID (default: 28)"
+        "--modality", type=str, default="mr", choices=["mr", "ct"],
+        help="Modality: 'mr' (default) or 'ct'"
+    )
+    parser.add_argument(
+        "--dataset_id", type=int, default=None,
+        help="nnU-Net dataset ID (default: 28 for MRI, 29 for CT)"
     )
     parser.add_argument(
         "--smoke_test", type=int, default=None,
@@ -203,9 +238,15 @@ def main():
     )
     args = parser.parse_args()
 
+    # Default dataset IDs: 28 for MRI, 29 for CT
+    dataset_id = args.dataset_id
+    if dataset_id is None:
+        dataset_id = 29 if args.modality == "ct" else 28
+
     convert_mmwhs(
         dataset_root=args.dataset_root,
-        dataset_id=args.dataset_id,
+        dataset_id=dataset_id,
+        modality=args.modality,
         smoke_test=args.smoke_test,
     )
 
