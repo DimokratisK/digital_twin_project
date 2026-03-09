@@ -667,12 +667,17 @@ def create_openfoam_case(
     dest_stl = tri_surface_dir / stl_filename
 
     # Check if STL has named regions (multi-region from cut_valve_openings.py)
+    # Read enough of the file to find region markers — wall section can be very long
     is_multi_region = False
-    with open(stl_path, "r", errors="ignore") as f:
-        header = f.read(1024)
-        # Multi-region STLs from our pipeline have "solid wall", "solid inlet", etc.
-        if "solid inlet" in header or "solid outlet" in header:
-            is_multi_region = True
+    try:
+        with open(stl_path, "r", errors="ignore") as f:
+            # Check first line and scan for multiple "solid" keywords
+            content = f.read()
+            solid_count = content.count("\nsolid ") + (1 if content.startswith("solid ") else 0)
+            if solid_count > 1:
+                is_multi_region = True
+    except (UnicodeDecodeError, IOError):
+        pass  # Binary STL — not multi-region
 
     if is_multi_region:
         # Already processed (scaled to metres, has named regions) — copy as-is
