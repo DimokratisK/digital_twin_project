@@ -512,11 +512,11 @@ boundaryField
     inlet
     {{
         type            uniformFixedValue;
-        uniformValue    table;
-        uniformValueCoeffs
+        uniformValue
         {{
-            file            "{inlet_waveform_file}";
-            outOfBounds     repeat;
+            type    tableFile;
+            file    "{inlet_waveform_file}";
+            outOfBounds repeat;
         }}
     }}
 
