@@ -305,25 +305,32 @@ FoamFile
 def write_openfoam_time_series(
     waveform: np.ndarray,
     output_path: str,
-    name: str = "inletVelocity",
+    direction: Tuple[float, float, float] = (1.0, 0.0, 0.0),
 ):
-    """Write a time-velocity waveform as an OpenFOAM-compatible CSV file.
+    """Write a time-velocity waveform in OpenFOAM table format.
 
-    The file can be used with uniformFixedValue + csvFile in OpenFOAM BCs.
+    Writes (time (vx vy vz)) entries for use with uniformFixedValue BC.
+    The scalar velocity magnitude is multiplied by the direction vector.
 
     Parameters
     ----------
-    waveform : array of shape (N, 2) with [time, velocity]
-    output_path : path to write the CSV
-    name : column header name
+    waveform : array of shape (N, 2) with [time, velocity_magnitude]
+    output_path : path to write the table file
+    direction : unit vector for flow direction (into the chamber)
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Normalise direction
+    d = np.array(direction, dtype=float)
+    d = d / np.linalg.norm(d)
+
     with open(output_path, "w") as f:
-        f.write(f"# time {name}\n")
+        f.write("(\n")
         for t, v in waveform:
-            f.write(f"{t:.6f} {v:.6f}\n")
+            vx, vy, vz = v * d[0], v * d[1], v * d[2]
+            f.write(f"    ({t:.6f} ({vx:.6f} {vy:.6f} {vz:.6f}))\n")
+        f.write(")\n")
 
 
 def write_transport_properties(output_path: str):

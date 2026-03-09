@@ -512,7 +512,7 @@ boundaryField
     inlet
     {{
         type            uniformFixedValue;
-        uniformValue    tableFile;
+        uniformValue    table;
         uniformValueCoeffs
         {{
             file            "{inlet_waveform_file}";
@@ -703,8 +703,23 @@ def create_openfoam_case(
             print("  STL: copied without scaling (trimesh not available)")
 
     # Write inlet waveform
+    # Flow direction: into the chamber = opposite to the outward base normal
+    # For multi-region STL, compute from geometry; otherwise default to (1,0,0)
+    if is_multi_region:
+        try:
+            from twin_core.cfd_pipeline.cut_valve_openings import find_chamber_base
+            import trimesh as _tmesh
+            _mesh = _tmesh.load(str(stl_path), force="mesh")
+            _, base_normal, _ = find_chamber_base(_mesh)
+            inlet_direction = tuple(-base_normal)  # into the chamber
+            print(f"  Inlet flow direction: ({inlet_direction[0]:.3f}, {inlet_direction[1]:.3f}, {inlet_direction[2]:.3f})")
+        except Exception:
+            inlet_direction = (1.0, 0.0, 0.0)
+    else:
+        inlet_direction = (1.0, 0.0, 0.0)
+
     waveform_path = case_dir / "constant" / "inlet_waveform.csv"
-    write_openfoam_time_series(inlet_waveform, str(waveform_path))
+    write_openfoam_time_series(inlet_waveform, str(waveform_path), direction=inlet_direction)
 
     # Write transport properties
     write_transport_properties(str(case_dir / "constant" / "transportProperties"))
