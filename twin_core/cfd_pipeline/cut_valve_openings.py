@@ -106,8 +106,9 @@ def classify_faces(
     mesh: trimesh.Trimesh,
     base_center: np.ndarray,
     base_normal: np.ndarray,
-    base_depth_frac: float = 0.12,
+    base_depth_frac: float = 0.05,
     inlet_angle_range: float = 220.0,
+    normal_alignment: float = 0.6,
 ) -> Dict[str, np.ndarray]:
     """Classify mesh faces into wall, inlet (MV), and outlet (AV).
 
@@ -120,6 +121,8 @@ def classify_faces(
     ----------
     base_depth_frac : fraction of total LV length to include from the base
     inlet_angle_range : angular span (degrees) for the inlet region
+    normal_alignment : minimum dot product between face normal and base normal
+        (0=perpendicular, 1=perfectly aligned). Higher values = stricter.
 
     Returns
     -------
@@ -144,7 +147,7 @@ def classify_faces(
 
     # Face normal should be somewhat aligned with base normal
     alignment = face_normals @ base_normal
-    facing_outward = alignment > 0.3
+    facing_outward = alignment > normal_alignment
 
     # Candidate valve faces
     candidates = near_base & facing_outward
@@ -355,7 +358,7 @@ def prepare_valve_stl(
     stl_path: str,
     output_path: str,
     scale_to_metres: bool = True,
-    base_depth_frac: float = 0.12,
+    base_depth_frac: float = 0.05,
     inlet_angle_range: float = 220.0,
 ) -> Dict:
     """Full pipeline: load STL, find base, classify faces, write multi-region STL.
@@ -435,8 +438,8 @@ def main():
         help="Don't scale to metres (keep original mm units)"
     )
     parser.add_argument(
-        "--base-depth", type=float, default=0.12,
-        help="Base depth as fraction of LV length (default: 0.12)"
+        "--base-depth", type=float, default=0.05,
+        help="Base depth as fraction of LV length (default: 0.05)"
     )
     parser.add_argument(
         "--inlet-angle", type=float, default=220.0,
