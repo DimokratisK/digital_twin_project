@@ -55,13 +55,14 @@ def _write_file(path: Path, content: str):
         f.write(content)
 
 
-def generate_block_mesh_dict(bbox: Dict, cell_size: float = 2.0) -> str:
+def generate_block_mesh_dict(bbox: Dict, cell_size: float = 2.0, bbox_in_metres: bool = False) -> str:
     """Generate blockMeshDict with a background hex mesh enclosing the STL.
 
     Parameters
     ----------
     bbox : bounding box dict from compute_bounding_box()
-    cell_size : target cell size in mm
+    cell_size : target cell size in mm (or metres if bbox_in_metres=True)
+    bbox_in_metres : if True, bbox is already in metres (skip mm→m conversion)
     """
     # Add 10% padding around the geometry
     padding = [0.1 * e for e in bbox["extents"]]
@@ -72,17 +73,20 @@ def generate_block_mesh_dict(bbox: Dict, cell_size: float = 2.0) -> str:
     ymax = bbox["max"][1] + padding[1]
     zmax = bbox["max"][2] + padding[2]
 
-    nx = max(1, int(np.ceil((xmax - xmin) / cell_size)))
-    ny = max(1, int(np.ceil((ymax - ymin) / cell_size)))
-    nz = max(1, int(np.ceil((zmax - zmin) / cell_size)))
+    # cell_size is always specified in mm; convert to match bbox units
+    cs = cell_size * 0.001 if bbox_in_metres else cell_size
+    nx = max(1, int(np.ceil((xmax - xmin) / cs)))
+    ny = max(1, int(np.ceil((ymax - ymin) / cs)))
+    nz = max(1, int(np.ceil((zmax - zmin) / cs)))
 
-    # Convert bounding box from mm to metres
-    xmin_m = xmin * 0.001
-    ymin_m = ymin * 0.001
-    zmin_m = zmin * 0.001
-    xmax_m = xmax * 0.001
-    ymax_m = ymax * 0.001
-    zmax_m = zmax * 0.001
+    # Convert to metres if needed
+    scale = 0.001 if not bbox_in_metres else 1.0
+    xmin_m = xmin * scale
+    ymin_m = ymin * scale
+    zmin_m = zmin * scale
+    xmax_m = xmax * scale
+    ymax_m = ymax * scale
+    zmax_m = zmax * scale
 
     header = _OPENFOAM_HEADER.format(
         class_name="dictionary", object_name="blockMeshDict"
@@ -140,16 +144,18 @@ def generate_snappy_hex_mesh_dict(
     refinement_level: int = 3,
     n_surface_layers: int = 3,
     multi_region: bool = False,
+    bbox_in_metres: bool = False,
 ) -> str:
     """Generate snappyHexMeshDict for STL-to-volume mesh conversion.
 
     Parameters
     ----------
     stl_filename : name of STL file in constant/triSurface/
-    bbox : bounding box dict (mm units, will be converted to metres)
+    bbox : bounding box dict (mm or metres depending on bbox_in_metres)
     refinement_level : number of refinement levels near surface
     n_surface_layers : number of boundary layer cells
     multi_region : if True, STL has named regions (wall, inlet, outlet)
+    bbox_in_metres : if True, bbox is already in metres (skip mm→m conversion)
     """
     surface_name = Path(stl_filename).stem
     header = _OPENFOAM_HEADER.format(
@@ -247,7 +253,7 @@ castellatedMeshControls
     {{
     }};
 
-    locationInMesh ({bbox['center'][0] * 0.001:.6f} {bbox['center'][1] * 0.001:.6f} {bbox['center'][2] * 0.001:.6f});
+    locationInMesh ({bbox['center'][0] * (1.0 if bbox_in_metres else 0.001):.6f} {bbox['center'][1] * (1.0 if bbox_in_metres else 0.001):.6f} {bbox['center'][2] * (1.0 if bbox_in_metres else 0.001):.6f});
     allowFreeStandingZoneFaces true;
 }};
 
@@ -707,11 +713,11 @@ def create_openfoam_case(
     system_dir = case_dir / "system"
     _write_file(
         system_dir / "blockMeshDict",
-        generate_block_mesh_dict(bbox, cell_size),
+        generate_block_mesh_dict(bbox, cell_size, bbox_in_metres=is_multi_region),
     )
     _write_file(
         system_dir / "snappyHexMeshDict",
-        generate_snappy_hex_mesh_dict(stl_filename, bbox, refinement_level, n_surface_layers, multi_region=is_multi_region),
+        generate_snappy_hex_mesh_dict(stl_filename, bbox, refinement_level, n_surface_layers, multi_region=is_multi_region, bbox_in_metres=is_multi_region),
     )
     _write_file(
         system_dir / "controlDict",
