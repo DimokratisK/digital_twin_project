@@ -127,7 +127,10 @@ def register_to_template(
         demons.SetSmoothDisplacementField(True)
         demons.SetSmoothUpdateField(True)
 
-        displacement_field_image = demons.Execute(fixed_image, moving_image)
+        # Execute(moving, fixed) gives the displacement field that maps
+        # points in the fixed (template) space to their corresponding
+        # locations in the moving (target) space
+        displacement_field_image = demons.Execute(moving_image, fixed_image)
 
         # Print convergence info
         rms = demons.GetRMSChange()
