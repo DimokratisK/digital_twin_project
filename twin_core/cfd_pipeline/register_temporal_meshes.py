@@ -2,63 +2,56 @@
 Temporal mesh registration for moving-mesh cardiac CFD.
 
 Creates topologically consistent meshes across cardiac frames by:
-1. Selecting a reference frame (ED) as the template
-2. Registering each frame's segmentation volume to the reference using
-   diffeomorphic image registration
-3. Warping the template surface mesh vertices using the resulting
-   displacement fields
+1. Selecting a reference frame (ED) as the template mesh
+2. Using Coherent Point Drift (CPD) to find a smooth deformation that
+   maps the template surface vertices to each target frame's surface
+3. Applying the deformation to produce meshes with identical topology
 
 This produces N meshes with IDENTICAL vertex count and connectivity
 but DIFFERENT vertex positions — exactly what OpenFOAM's
 dynamicMeshDict / displacementInterpolation needs.
 
 Method:
-    Diffeomorphic image registration (SimpleITK)
-    - Uses signed distance transforms of segmentation labels (not binary masks)
-      for much better gradient information
-    - Diffeomorphic demons registration to find displacement field
-    - Displacement field applied to template mesh vertices via interpolation
+    Coherent Point Drift (CPD) — non-rigid point set registration
+    - Operates directly on mesh surface vertices (no volumetric registration)
+    - Finds smooth, coherent deformation field between point sets
+    - Regularized to prevent folding/tearing
+    - Well-suited for cardiac motion tracking
 
 References:
+    - Myronenko A, Song X. "Point Set Registration: Coherent Point Drift."
+      IEEE TPAMI 32(12):2262-2275, 2010. doi:10.1109/TPAMI.2010.46
     - Sotiras A, Davatzikos C, Paragios N. "Deformable Medical Image
       Registration: A Survey." IEEE TMI 32(7):1153-1190, 2013.
-    - Tobon-Gomez C et al. "Benchmarking framework for myocardial tracking
-      and deformation algorithms." Med Image Anal 17(6):632-648, 2013.
 
 Usage:
     python -m twin_core.cfd_pipeline.register_temporal_meshes \
-        --predictions ~/digital_twin_project/test_3d/predictions \
+        --predictions-meshes ~/digital_twin_project/test_3d/meshes \
         --template-mesh ~/digital_twin_project/test_3d/meshes/patient006_frame01/LV.stl \
         --template-frame patient006_frame01 \
         --output ~/digital_twin_project/test_3d/registered_meshes \
-        --label 3
+        --structure LV
 
     # Verify consistency:
     python -m twin_core.cfd_pipeline.register_temporal_meshes \
         --verify ~/digital_twin_project/test_3d/registered_meshes
 
-Dependencies (install on VM):
-    pip install SimpleITK nibabel trimesh numpy scipy
+Dependencies:
+    pip install pycpd trimesh numpy scipy
 """
 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 
 import numpy as np
 
 try:
-    import SimpleITK as sitk
+    from pycpd import DeformableRegistration
 except ImportError:
-    sitk = None
-    print("WARNING: SimpleITK not installed. Install with: pip install SimpleITK")
-
-try:
-    import nibabel as nib
-except ImportError:
-    nib = None
-    print("WARNING: nibabel not installed. Install with: pip install nibabel")
+    DeformableRegistration = None
+    print("WARNING: pycpd not installed. Install with: pip install pycpd")
 
 try:
     import trimesh
@@ -66,308 +59,255 @@ except ImportError:
     trimesh = None
     print("WARNING: trimesh not installed. Install with: pip install trimesh")
 
-from scipy.ndimage import map_coordinates
 
+def subsample_points(vertices: np.ndarray, n_points: int = 2000) -> np.ndarray:
+    """Subsample vertices for faster CPD registration.
 
-def load_segmentation_as_sitk(nifti_path: str, label: int) -> "sitk.Image":
-    """Load a NIfTI segmentation and create a signed distance transform.
+    CPD is O(N*M) so we register on a subset, then interpolate.
 
-    Using signed distance transforms instead of binary masks gives the
-    registration much more gradient information to work with, leading to
-    larger and more accurate displacement fields.
-
-    Parameters
-    ----------
-    nifti_path : path to .nii.gz segmentation file
-    label : integer label to extract (e.g., 3 for LV in ACDC)
-
-    Returns
-    -------
-    SimpleITK Image with signed distance transform (float64)
+    Returns indices of selected vertices.
     """
-    img = sitk.ReadImage(str(nifti_path))
-    # Extract single label as binary mask
-    binary = sitk.Equal(img, label)
-    binary = sitk.Cast(binary, sitk.sitkUInt8)
-
-    # Signed distance transform: negative inside, positive outside
-    # This gives the registration algorithm gradient information everywhere,
-    # not just at the surface boundary
-    distance = sitk.SignedMaurerDistanceMap(
-        binary,
-        insideIsPositive=False,
-        squaredDistance=False,
-        useImageSpacing=True,
-    )
-    return sitk.Cast(distance, sitk.sitkFloat64)
+    if len(vertices) <= n_points:
+        return np.arange(len(vertices))
+    indices = np.random.choice(len(vertices), n_points, replace=False)
+    return np.sort(indices)
 
 
-def register_to_template(
-    fixed_image: "sitk.Image",
-    moving_image: "sitk.Image",
-    method: str = "demons",
-) -> "sitk.Image":
-    """Register moving_image to fixed_image and return displacement field IMAGE.
-
-    Parameters
-    ----------
-    fixed_image : reference (template) signed distance map
-    moving_image : target frame signed distance map
-    method : 'demons' (recommended) or 'bspline'
-
-    Returns
-    -------
-    SimpleITK Image representing the displacement field
-    """
-    if method == "demons":
-        # Diffeomorphic demons — handles large deformations properly
-        demons = sitk.DiffeomorphicDemonsRegistrationFilter()
-        demons.SetNumberOfIterations(300)
-        demons.SetStandardDeviations(1.0)
-        demons.SetSmoothDisplacementField(True)
-        demons.SetSmoothUpdateField(True)
-
-        # Execute(moving, fixed) gives the displacement field that maps
-        # points in the fixed (template) space to their corresponding
-        # locations in the moving (target) space
-        displacement_field_image = demons.Execute(moving_image, fixed_image)
-
-        # Print convergence info
-        rms = demons.GetRMSChange()
-        iters = demons.GetElapsedIterations()
-        print(f"(RMS={rms:.6f}, {iters} iters)", end=" ", flush=True)
-
-        return displacement_field_image
-
-    elif method == "bspline":
-        # B-spline via registration framework
-        registration = sitk.ImageRegistrationMethod()
-        registration.SetMetricAsMeanSquares()
-        registration.SetOptimizerAsLBFGSB(
-            gradientConvergenceTolerance=1e-6,
-            numberOfIterations=500,
-            maximumNumberOfCorrections=10,
-            maximumNumberOfFunctionEvaluations=2000,
-            costFunctionConvergenceFactor=1e7,
-        )
-        registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
-        registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
-        registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
-
-        grid_physical_spacing = [5.0, 5.0, 5.0]  # mm
-        image_size = fixed_image.GetSize()
-        image_spacing = fixed_image.GetSpacing()
-        mesh_size = [
-            int(round(sz * sp / gsp))
-            for sz, sp, gsp in zip(image_size, image_spacing, grid_physical_spacing)
-        ]
-        mesh_size = [max(5, m) for m in mesh_size]
-
-        tx = sitk.BSplineTransformInitializer(
-            fixed_image, transformDomainMeshSize=mesh_size, order=3
-        )
-        registration.SetInitialTransform(tx, inPlace=True)
-        registration.SetInterpolator(sitk.sitkLinear)
-
-        final_transform = registration.Execute(fixed_image, moving_image)
-
-        displacement_filter = sitk.TransformToDisplacementFieldFilter()
-        displacement_filter.SetReferenceImage(fixed_image)
-        displacement_field_image = displacement_filter.Execute(final_transform)
-
-        return displacement_field_image
-
-    else:
-        raise ValueError(f"Unknown method: {method}. Use 'demons' or 'bspline'.")
-
-
-def warp_mesh_vertices(
-    vertices_mm: np.ndarray,
-    displacement_field: "sitk.Image",
+def register_cpd(
+    template_vertices: np.ndarray,
+    target_vertices: np.ndarray,
+    alpha: float = 2.0,
+    beta: float = 2.0,
+    max_iterations: int = 150,
+    tolerance: float = 1e-5,
 ) -> np.ndarray:
-    """Warp mesh vertices using a SimpleITK displacement field.
+    """Register template vertices to target using non-rigid CPD.
 
     Parameters
     ----------
-    vertices_mm : (N, 3) array of vertex positions in mm (physical space)
-    displacement_field : SimpleITK displacement field image
+    template_vertices : (N, 3) source point set
+    target_vertices : (M, 3) target point set
+    alpha : trade-off between fit and regularization (higher = smoother)
+    beta : width of Gaussian kernel (higher = more global/rigid deformation)
+    max_iterations : maximum CPD iterations
+    tolerance : convergence tolerance
 
     Returns
     -------
-    (N, 3) array of warped vertex positions in mm
+    (N, 3) deformed template vertices
     """
-    # Convert displacement field to numpy
-    # SimpleITK GetArrayFromImage returns (Z, Y, X, 3) for vector images
-    # The 3 components are in (X, Y, Z) order within each voxel
-    disp_np = sitk.GetArrayFromImage(displacement_field)  # (Z, Y, X, 3)
+    reg = DeformableRegistration(
+        X=target_vertices,    # target (what we want to match)
+        Y=template_vertices,  # source (what gets deformed)
+        alpha=alpha,
+        beta=beta,
+        max_iterations=max_iterations,
+        tolerance=tolerance,
+    )
+    deformed, _ = reg.register()
+    return deformed
 
-    # Get image geometry
-    origin = np.array(displacement_field.GetOrigin())       # (X, Y, Z) in mm
-    spacing = np.array(displacement_field.GetSpacing())      # (X, Y, Z)
-    direction = np.array(displacement_field.GetDirection()).reshape(3, 3)
-    inv_direction = np.linalg.inv(direction)
 
-    warped = np.zeros_like(vertices_mm)
+def register_with_interpolation(
+    template_vertices: np.ndarray,
+    target_vertices: np.ndarray,
+    n_subsample: int = 2000,
+    alpha: float = 2.0,
+    beta: float = 2.0,
+    max_iterations: int = 150,
+) -> np.ndarray:
+    """Register using CPD on subsampled points, then interpolate to full mesh.
 
-    for i in range(len(vertices_mm)):
-        # Physical (mm) to continuous voxel index
-        phys_xyz = vertices_mm[i]  # (X, Y, Z)
-        voxel_xyz = inv_direction @ ((phys_xyz - origin) / spacing)
+    For large meshes, running CPD on all vertices is slow. Instead:
+    1. Subsample both template and target
+    2. Run CPD on subsampled sets to get displacement field
+    3. Interpolate displacements to all template vertices using RBF
 
-        # For scipy map_coordinates, we need (Z, Y, X) indexing
-        voxel_zyx = np.array([voxel_xyz[2], voxel_xyz[1], voxel_xyz[0]])
+    Parameters
+    ----------
+    template_vertices : (N, 3) all template vertices
+    target_vertices : (M, 3) all target surface vertices
+    n_subsample : number of points for CPD registration
+    alpha, beta : CPD parameters
 
-        # Clamp to valid range
-        shape_zyx = np.array(disp_np.shape[:3], dtype=float) - 1
-        voxel_zyx = np.clip(voxel_zyx, 0, shape_zyx)
+    Returns
+    -------
+    (N, 3) deformed positions for ALL template vertices
+    """
+    from scipy.interpolate import RBFInterpolator
 
-        # Trilinear interpolation for each displacement component
-        # Components in displacement field are (X, Y, Z)
-        dx = map_coordinates(disp_np[..., 0], voxel_zyx.reshape(3, 1),
-                             order=1, mode='nearest')[0]
-        dy = map_coordinates(disp_np[..., 1], voxel_zyx.reshape(3, 1),
-                             order=1, mode='nearest')[0]
-        dz = map_coordinates(disp_np[..., 2], voxel_zyx.reshape(3, 1),
-                             order=1, mode='nearest')[0]
+    n_template = len(template_vertices)
+    n_target = len(target_vertices)
 
-        # Apply displacement
-        warped[i] = phys_xyz + np.array([dx, dy, dz])
+    # If small enough, just run CPD directly
+    if n_template <= n_subsample:
+        return register_cpd(template_vertices, target_vertices,
+                            alpha=alpha, beta=beta, max_iterations=max_iterations)
 
-    return warped
+    # Subsample template
+    sub_idx = subsample_points(template_vertices, n_subsample)
+    sub_template = template_vertices[sub_idx]
+
+    # Subsample target (for speed)
+    target_sub_idx = subsample_points(target_vertices, n_subsample)
+    sub_target = target_vertices[target_sub_idx]
+
+    # Run CPD on subsampled points
+    sub_deformed = register_cpd(sub_template, sub_target,
+                                alpha=alpha, beta=beta,
+                                max_iterations=max_iterations)
+
+    # Compute displacements at subsampled points
+    sub_displacements = sub_deformed - sub_template
+
+    # Interpolate displacements to all template vertices using RBF
+    # Using thin-plate spline kernel for smooth interpolation
+    rbf_x = RBFInterpolator(sub_template, sub_displacements[:, 0],
+                            kernel='thin_plate_spline', smoothing=1.0)
+    rbf_y = RBFInterpolator(sub_template, sub_displacements[:, 1],
+                            kernel='thin_plate_spline', smoothing=1.0)
+    rbf_z = RBFInterpolator(sub_template, sub_displacements[:, 2],
+                            kernel='thin_plate_spline', smoothing=1.0)
+
+    full_displacements = np.column_stack([
+        rbf_x(template_vertices),
+        rbf_y(template_vertices),
+        rbf_z(template_vertices),
+    ])
+
+    return template_vertices + full_displacements
 
 
 def register_all_frames(
-    predictions_dir: str,
+    meshes_dir: str,
     template_mesh_path: str,
     template_frame: str,
     output_dir: str,
-    label: int = 3,
-    method: str = "demons",
     structure_name: str = "LV",
+    n_subsample: int = 2000,
+    alpha: float = 2.0,
+    beta: float = 2.0,
 ):
-    """Register all frames to the template and warp the template mesh.
+    """Register all frames to the template using CPD.
 
     Parameters
     ----------
-    predictions_dir : directory containing frame_XX.nii.gz predictions
-    template_mesh_path : path to template STL (from template frame)
+    meshes_dir : directory containing per-frame mesh subdirectories
+    template_mesh_path : path to template STL mesh
     template_frame : name of template frame (e.g., 'patient006_frame01')
     output_dir : directory for output registered meshes
-    label : segmentation label for the structure (3=LV for ACDC)
-    method : registration method ('bspline' or 'demons')
-    structure_name : name for output files (e.g., 'LV')
+    structure_name : STL filename stem (e.g., 'LV')
+    n_subsample : number of points for CPD (more = slower but more accurate)
+    alpha : CPD regularization (higher = smoother deformation)
+    beta : CPD kernel width (higher = more rigid/global deformation)
     """
-    predictions_dir = Path(predictions_dir)
+    meshes_dir = Path(meshes_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load template
-    template_nifti = predictions_dir / f"{template_frame}.nii.gz"
-    if not template_nifti.exists():
-        raise FileNotFoundError(f"Template prediction not found: {template_nifti}")
-
-    print(f"\n=== Temporal Mesh Registration ===")
+    print(f"\n=== Temporal Mesh Registration (CPD) ===")
     print(f"  Template frame: {template_frame}")
     print(f"  Template mesh: {template_mesh_path}")
-    print(f"  Label: {label} ({structure_name})")
-    print(f"  Method: {method}")
+    print(f"  Structure: {structure_name}")
+    print(f"  CPD params: alpha={alpha}, beta={beta}, subsample={n_subsample}")
     print(f"  Output: {output_dir}")
 
-    # Load template image and mesh
-    print(f"\n  Loading template segmentation (signed distance transform)...")
-    fixed_image = load_segmentation_as_sitk(str(template_nifti), label)
-
-    # Print image info
-    print(f"  Image size: {fixed_image.GetSize()}")
-    print(f"  Image spacing (mm): {fixed_image.GetSpacing()}")
-    print(f"  Image origin (mm): {fixed_image.GetOrigin()}")
-
-    # Check that signed distance has reasonable range
-    stats = sitk.StatisticsImageFilter()
-    stats.Execute(fixed_image)
-    print(f"  Distance map range: [{stats.GetMinimum():.2f}, {stats.GetMaximum():.2f}] mm")
-
+    # Load template mesh
     print(f"\n  Loading template mesh...")
     template_mesh = trimesh.load(str(template_mesh_path), force="mesh")
-    template_vertices = template_mesh.vertices.copy()  # in mm
+    template_vertices = template_mesh.vertices.copy()
     template_faces = template_mesh.faces.copy()
 
     n_verts = len(template_vertices)
     n_faces = len(template_faces)
     print(f"  Template: {n_verts:,} vertices, {n_faces:,} faces")
-    print(f"  Vertex bounds (mm): min={template_vertices.min(axis=0).round(1)}, max={template_vertices.max(axis=0).round(1)}")
+    print(f"  Template volume: {template_mesh.volume:.0f} mm3")
 
-    # Find all prediction frames
-    pred_files = sorted(predictions_dir.glob("patient006_frame*.nii.gz"))
-    print(f"  Found {len(pred_files)} frames to process\n")
+    # Find all frame directories
+    frame_dirs = sorted(meshes_dir.glob("patient006_frame*"))
+    print(f"  Found {len(frame_dirs)} frames to process\n")
 
-    # Store metadata
     metadata = {
         "template_frame": template_frame,
         "template_mesh": str(template_mesh_path),
-        "label": label,
         "structure": structure_name,
-        "method": method,
+        "method": "CPD (non-rigid)",
+        "cpd_alpha": alpha,
+        "cpd_beta": beta,
+        "n_subsample": n_subsample,
         "n_vertices": n_verts,
         "n_faces": n_faces,
         "frames": {},
     }
 
-    for pred_file in pred_files:
-        frame_name = pred_file.stem.replace(".nii", "")
-        frame_dir = output_dir / frame_name
-        frame_dir.mkdir(parents=True, exist_ok=True)
+    for frame_dir in frame_dirs:
+        frame_name = frame_dir.name
+        target_stl = frame_dir / f"{structure_name}.stl"
 
-        out_stl = frame_dir / f"{structure_name}.stl"
+        if not target_stl.exists():
+            print(f"  {frame_name}: SKIPPED (no {structure_name}.stl)")
+            continue
+
+        out_dir = output_dir / frame_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_stl = out_dir / f"{structure_name}.stl"
 
         if frame_name == template_frame:
-            # Template frame — just copy the mesh
             print(f"  {frame_name}: template (copy)")
             template_mesh.export(str(out_stl))
             metadata["frames"][frame_name] = {
                 "type": "template",
                 "max_displacement_mm": 0.0,
+                "volume_mm3": float(template_mesh.volume),
             }
             continue
 
-        print(f"  {frame_name}: registering...", end=" ", flush=True)
+        print(f"  {frame_name}: ", end="", flush=True)
 
-        # Load target frame
-        moving_image = load_segmentation_as_sitk(str(pred_file), label)
-
-        # Register — returns displacement field IMAGE
         try:
-            disp_field_image = register_to_template(fixed_image, moving_image, method)
+            # Load target mesh
+            target_mesh = trimesh.load(str(target_stl), force="mesh")
+            target_vertices = target_mesh.vertices.copy()
 
-            # Quick stats on the displacement field
-            disp_np = sitk.GetArrayFromImage(disp_field_image)
-            disp_mag = np.sqrt(disp_np[..., 0]**2 + disp_np[..., 1]**2 + disp_np[..., 2]**2)
-            print(f"\n    Field max magnitude: {disp_mag.max():.2f} mm", end=" ")
+            print(f"registering ({len(target_vertices)} target pts)...", end=" ", flush=True)
 
-            # Warp template vertices
-            warped_vertices = warp_mesh_vertices(template_vertices, disp_field_image)
+            # Run CPD registration
+            deformed_vertices = register_with_interpolation(
+                template_vertices,
+                target_vertices,
+                n_subsample=n_subsample,
+                alpha=alpha,
+                beta=beta,
+            )
 
-            # Compute displacement statistics
-            displacements = np.linalg.norm(warped_vertices - template_vertices, axis=1)
+            # Statistics
+            displacements = np.linalg.norm(deformed_vertices - template_vertices, axis=1)
             max_disp = float(displacements.max())
             mean_disp = float(displacements.mean())
-            median_disp = float(np.median(displacements))
 
-            # Create warped mesh with same topology
-            warped_mesh = trimesh.Trimesh(
-                vertices=warped_vertices,
+            # Create output mesh with same topology
+            deformed_mesh = trimesh.Trimesh(
+                vertices=deformed_vertices,
                 faces=template_faces,
-                process=False,  # Don't modify connectivity!
+                process=False,
             )
-            warped_mesh.export(str(out_stl))
+            deformed_mesh.export(str(out_stl))
 
-            print(f"| Mesh max: {max_disp:.2f} mm, mean: {mean_disp:.2f} mm")
+            # Volume comparison
+            target_vol = float(target_mesh.volume)
+            reg_vol = float(deformed_mesh.volume)
+            vol_err = abs(reg_vol - target_vol) / target_vol * 100
+
+            print(f"done | max={max_disp:.1f}mm mean={mean_disp:.1f}mm | "
+                  f"vol: target={target_vol:.0f} reg={reg_vol:.0f} err={vol_err:.1f}%")
 
             metadata["frames"][frame_name] = {
                 "type": "registered",
                 "max_displacement_mm": max_disp,
                 "mean_displacement_mm": mean_disp,
-                "median_displacement_mm": median_disp,
+                "target_volume_mm3": target_vol,
+                "registered_volume_mm3": reg_vol,
+                "volume_error_pct": vol_err,
             }
 
         except Exception as e:
@@ -386,19 +326,21 @@ def register_all_frames(
 
     # Print summary
     print(f"\n=== Registration Summary ===")
-    disps = [
-        f["max_displacement_mm"]
-        for f in metadata["frames"].values()
-        if f.get("type") == "registered"
-    ]
-    if disps:
-        print(f"  Max displacement range: {min(disps):.2f} — {max(disps):.2f} mm")
-        print(f"  Mean of max displacements: {np.mean(disps):.2f} mm")
-    failed = sum(1 for f in metadata["frames"].values() if f.get("type") == "failed")
+    registered = {k: v for k, v in metadata["frames"].items()
+                  if v.get("type") == "registered"}
+    if registered:
+        disps = [v["max_displacement_mm"] for v in registered.values()]
+        vol_errs = [v["volume_error_pct"] for v in registered.values()]
+        print(f"  Max displacement range: {min(disps):.1f} — {max(disps):.1f} mm")
+        print(f"  Mean max displacement: {np.mean(disps):.1f} mm")
+        print(f"  Volume error: mean={np.mean(vol_errs):.1f}%, max={np.max(vol_errs):.1f}%")
+
+    failed = sum(1 for v in metadata["frames"].values() if v.get("type") == "failed")
     if failed:
-        print(f"  WARNING: {failed} frames failed registration")
+        print(f"  WARNING: {failed} frames failed")
+
     print(f"  Metadata saved: {meta_path}")
-    print(f"  Done. {len(metadata['frames'])} frames processed.")
+    print(f"  Done.")
 
     return metadata
 
@@ -460,8 +402,8 @@ def main():
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--predictions", type=str,
-        help="Directory containing frame prediction NIfTI files"
+        "--predictions-meshes", type=str,
+        help="Directory containing per-frame mesh subdirectories (each with LV.stl)"
     )
     group.add_argument(
         "--verify", type=str,
@@ -470,7 +412,7 @@ def main():
 
     parser.add_argument(
         "--template-mesh", type=str,
-        help="Path to template STL mesh (required with --predictions)"
+        help="Path to template STL mesh (required with --predictions-meshes)"
     )
     parser.add_argument(
         "--template-frame", type=str, default="patient006_frame01",
@@ -481,16 +423,20 @@ def main():
         help="Output directory for registered meshes"
     )
     parser.add_argument(
-        "--label", type=int, default=3,
-        help="Segmentation label for structure (default: 3 = LV for ACDC)"
-    )
-    parser.add_argument(
-        "--method", type=str, default="demons", choices=["bspline", "demons"],
-        help="Registration method (default: demons)"
-    )
-    parser.add_argument(
         "--structure", type=str, default="LV",
-        help="Structure name for output files (default: LV)"
+        help="Structure name / STL filename (default: LV)"
+    )
+    parser.add_argument(
+        "--subsample", type=int, default=2000,
+        help="Number of points for CPD registration (default: 2000)"
+    )
+    parser.add_argument(
+        "--alpha", type=float, default=2.0,
+        help="CPD regularization parameter (default: 2.0)"
+    )
+    parser.add_argument(
+        "--beta", type=float, default=2.0,
+        help="CPD kernel width parameter (default: 2.0)"
     )
 
     args = parser.parse_args()
@@ -500,16 +446,17 @@ def main():
         return
 
     if not args.template_mesh or not args.output:
-        parser.error("--template-mesh and --output are required with --predictions")
+        parser.error("--template-mesh and --output are required with --predictions-meshes")
 
     register_all_frames(
-        predictions_dir=args.predictions,
+        meshes_dir=args.predictions_meshes,
         template_mesh_path=args.template_mesh,
         template_frame=args.template_frame,
         output_dir=args.output,
-        label=args.label,
-        method=args.method,
         structure_name=args.structure,
+        n_subsample=args.subsample,
+        alpha=args.alpha,
+        beta=args.beta,
     )
 
 
