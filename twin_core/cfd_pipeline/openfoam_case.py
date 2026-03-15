@@ -490,10 +490,30 @@ def generate_decompose_par_dict(n_processors: int = 4) -> str:
     header = _OPENFOAM_HEADER.format(
         class_name="dictionary", object_name="decomposeParDict"
     )
+    # Factor n_processors into roughly equal divisions along x, y, z
+    import math
+    n = n_processors
+    nz = 1
+    while nz * nz * nz <= n:
+        if n % nz == 0:
+            best_z = nz
+        nz += 1
+    nz = best_z
+    rem = n // nz
+    ny = int(math.isqrt(rem))
+    while rem % ny != 0:
+        ny -= 1
+    nx = rem // ny
     return f"""{header}
 numberOfSubdomains {n_processors};
 
-method          scotch;
+method          simple;
+
+simpleCoeffs
+{{
+    n           ({nx} {ny} {nz});
+    delta       0.001;
+}}
 """
 
 
@@ -723,6 +743,15 @@ def create_openfoam_case(
 
     # Write transport properties
     write_transport_properties(str(case_dir / "constant" / "transportProperties"))
+
+    # Write turbulence properties (laminar)
+    turb_header = _OPENFOAM_HEADER.format(
+        class_name="dictionary", object_name="turbulenceProperties"
+    )
+    _write_file(
+        case_dir / "constant" / "turbulenceProperties",
+        f"{turb_header}\nsimulationType  laminar;\n",
+    )
 
     # Write system files
     system_dir = case_dir / "system"

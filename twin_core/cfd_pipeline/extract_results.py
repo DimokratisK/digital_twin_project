@@ -41,8 +41,12 @@ def find_time_directories(case_dir: str) -> List[Path]:
     return sorted(time_dirs, key=lambda p: float(p.name))
 
 
-def parse_openfoam_vector_field(filepath: str) -> Optional[np.ndarray]:
+def parse_openfoam_vector_field(filepath: str, patch: str = "wall") -> Optional[np.ndarray]:
     """Parse an OpenFOAM vector field file into a numpy array.
+
+    For boundary fields (like wallShearStress), reads data from the
+    specified patch under boundaryField. For volume fields, reads
+    internalField.
 
     Returns array of shape (N, 3) for N face/cell values.
     """
@@ -53,19 +57,61 @@ def parse_openfoam_vector_field(filepath: str) -> Optional[np.ndarray]:
     with open(filepath, "r") as f:
         content = f.read()
 
-    # Find the data block between ( and )
-    start = content.find("(", content.find("internalField"))
-    if start == -1:
-        # Try wall patch data
-        start = content.find("(", content.find("wallShearStress"))
-    if start == -1:
-        return None
+    # First try: look for data under boundaryField -> patch -> value
+    # This is where wallShearStress stores its per-face data
+    patch_pos = content.find(f"    {patch}\n")
+    if patch_pos == -1:
+        patch_pos = content.find(f"    {patch}\r\n")
 
-    end = content.find(")", start)
-    if end == -1:
-        return None
+    if patch_pos != -1:
+        # Find "nonuniform List<vector>" after the patch name
+        list_pos = content.find("nonuniform List<vector>", patch_pos)
+        if list_pos != -1:
+            # Find the opening ( after the count
+            start = content.find("(", list_pos)
+            if start != -1:
+                # Find matching closing ) — skip nested ()
+                depth = 0
+                end = start
+                for i in range(start, len(content)):
+                    if content[i] == "(":
+                        depth += 1
+                    elif content[i] == ")":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
 
-    data_str = content[start + 1:end].strip()
+                data_str = content[start + 1:end].strip()
+                vectors = _parse_vector_block(data_str)
+                if vectors is not None:
+                    return vectors
+
+    # Fallback: try internalField nonuniform
+    internal_pos = content.find("internalField   nonuniform")
+    if internal_pos != -1:
+        start = content.find("(", internal_pos)
+        if start != -1:
+            depth = 0
+            end = start
+            for i in range(start, len(content)):
+                if content[i] == "(":
+                    depth += 1
+                elif content[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            data_str = content[start + 1:end].strip()
+            vectors = _parse_vector_block(data_str)
+            if vectors is not None:
+                return vectors
+
+    return None
+
+
+def _parse_vector_block(data_str: str) -> Optional[np.ndarray]:
+    """Parse a block of OpenFOAM vector data into numpy array."""
     if not data_str:
         return None
 
