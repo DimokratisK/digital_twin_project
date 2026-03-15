@@ -96,6 +96,8 @@ def register_cpd(
     -------
     (N, 3) deformed template vertices
     """
+    template_vertices = np.ascontiguousarray(template_vertices, dtype=np.float64)
+    target_vertices = np.ascontiguousarray(target_vertices, dtype=np.float64)
     reg = DeformableRegistration(
         X=target_vertices,    # target (what we want to match)
         Y=template_vertices,  # source (what gets deformed)
