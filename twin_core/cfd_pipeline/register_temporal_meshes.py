@@ -4,7 +4,7 @@ Temporal mesh registration for moving-mesh cardiac CFD.
 Creates topologically consistent meshes across cardiac frames by:
 1. Selecting a reference frame (ED) as the template
 2. Registering each frame's segmentation volume to the reference using
-   diffeomorphic (B-spline SyN) image registration
+   diffeomorphic image registration
 3. Warping the template surface mesh vertices using the resulting
    displacement fields
 
@@ -14,8 +14,9 @@ dynamicMeshDict / displacementInterpolation needs.
 
 Method:
     Diffeomorphic image registration (SimpleITK)
-    - Uses the segmentation label maps directly
-    - B-spline or demons registration to find displacement field
+    - Uses signed distance transforms of segmentation labels (not binary masks)
+      for much better gradient information
+    - Diffeomorphic demons registration to find displacement field
     - Displacement field applied to template mesh vertices via interpolation
 
 References:
@@ -25,7 +26,7 @@ References:
       and deformation algorithms." Med Image Anal 17(6):632-648, 2013.
 
 Usage:
-    python register_temporal_meshes.py \
+    python -m twin_core.cfd_pipeline.register_temporal_meshes \
         --predictions ~/digital_twin_project/test_3d/predictions \
         --template-mesh ~/digital_twin_project/test_3d/meshes/patient006_frame01/LV.stl \
         --template-frame patient006_frame01 \
@@ -33,7 +34,7 @@ Usage:
         --label 3
 
     # Verify consistency:
-    python register_temporal_meshes.py \
+    python -m twin_core.cfd_pipeline.register_temporal_meshes \
         --verify ~/digital_twin_project/test_3d/registered_meshes
 
 Dependencies (install on VM):
@@ -69,7 +70,11 @@ from scipy.ndimage import map_coordinates
 
 
 def load_segmentation_as_sitk(nifti_path: str, label: int) -> "sitk.Image":
-    """Load a NIfTI segmentation and create a binary mask for the given label.
+    """Load a NIfTI segmentation and create a signed distance transform.
+
+    Using signed distance transforms instead of binary masks gives the
+    registration much more gradient information to work with, leading to
+    larger and more accurate displacement fields.
 
     Parameters
     ----------
@@ -78,98 +83,99 @@ def load_segmentation_as_sitk(nifti_path: str, label: int) -> "sitk.Image":
 
     Returns
     -------
-    SimpleITK Image with binary mask (float32, values 0.0/1.0)
+    SimpleITK Image with signed distance transform (float64)
     """
     img = sitk.ReadImage(str(nifti_path))
     # Extract single label as binary mask
     binary = sitk.Equal(img, label)
-    # Convert to float for registration (smoother gradients)
-    binary_float = sitk.Cast(binary, sitk.sitkFloat32)
-    # Light Gaussian smoothing to help registration converge
-    smoothed = sitk.SmoothingRecursiveGaussian(binary_float, sigma=0.5)
-    return smoothed
+    binary = sitk.Cast(binary, sitk.sitkUInt8)
+
+    # Signed distance transform: negative inside, positive outside
+    # This gives the registration algorithm gradient information everywhere,
+    # not just at the surface boundary
+    distance = sitk.SignedMaurerDistanceMap(
+        binary,
+        insideIsPositive=False,
+        squaredDistance=False,
+        useImageSpacing=True,
+    )
+    return sitk.Cast(distance, sitk.sitkFloat64)
 
 
 def register_to_template(
     fixed_image: "sitk.Image",
     moving_image: "sitk.Image",
-    method: str = "bspline",
-) -> "sitk.DisplacementFieldTransform":
-    """Register moving_image to fixed_image and return displacement field.
+    method: str = "demons",
+) -> "sitk.Image":
+    """Register moving_image to fixed_image and return displacement field IMAGE.
 
     Parameters
     ----------
-    fixed_image : reference (template) segmentation
-    moving_image : target frame segmentation
-    method : 'bspline' (faster) or 'demons' (more flexible)
+    fixed_image : reference (template) signed distance map
+    moving_image : target frame signed distance map
+    method : 'demons' (recommended) or 'bspline'
 
     Returns
     -------
-    SimpleITK DisplacementFieldTransform mapping fixed→moving space
+    SimpleITK Image representing the displacement field
     """
     if method == "demons":
-        # Demons registration — good for label maps
-        demons = sitk.DemonsRegistrationFilter()
-        demons.SetNumberOfIterations(200)
-        demons.SetStandardDeviations(1.5)
+        # Diffeomorphic demons — handles large deformations properly
+        demons = sitk.DiffeomorphicDemonsRegistrationFilter()
+        demons.SetNumberOfIterations(300)
+        demons.SetStandardDeviations(1.0)
         demons.SetSmoothDisplacementField(True)
         demons.SetSmoothUpdateField(True)
 
-        displacement_field = demons.Execute(fixed_image, moving_image)
-        return sitk.DisplacementFieldTransform(displacement_field)
+        displacement_field_image = demons.Execute(fixed_image, moving_image)
+
+        # Print convergence info
+        rms = demons.GetRMSChange()
+        iters = demons.GetElapsedIterations()
+        print(f"(RMS={rms:.6f}, {iters} iters)", end=" ", flush=True)
+
+        return displacement_field_image
 
     elif method == "bspline":
-        # B-spline registration via registration framework
+        # B-spline via registration framework
         registration = sitk.ImageRegistrationMethod()
-
-        # Similarity metric — mean squares works well for binary/near-binary
         registration.SetMetricAsMeanSquares()
-
-        # Optimizer
         registration.SetOptimizerAsLBFGSB(
-            gradientConvergenceTolerance=1e-5,
-            numberOfIterations=200,
-            maximumNumberOfCorrections=5,
-            maximumNumberOfFunctionEvaluations=1000,
+            gradientConvergenceTolerance=1e-6,
+            numberOfIterations=500,
+            maximumNumberOfCorrections=10,
+            maximumNumberOfFunctionEvaluations=2000,
             costFunctionConvergenceFactor=1e7,
         )
-
-        # Multi-resolution strategy
         registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
         registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
         registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 
-        # B-spline transform
-        grid_physical_spacing = [8.0, 8.0, 8.0]  # mm — control point spacing
+        grid_physical_spacing = [5.0, 5.0, 5.0]  # mm
         image_size = fixed_image.GetSize()
         image_spacing = fixed_image.GetSpacing()
         mesh_size = [
             int(round(sz * sp / gsp))
             for sz, sp, gsp in zip(image_size, image_spacing, grid_physical_spacing)
         ]
-        # Ensure at least 4 control points per dimension
-        mesh_size = [max(4, m) for m in mesh_size]
+        mesh_size = [max(5, m) for m in mesh_size]
 
         tx = sitk.BSplineTransformInitializer(
             fixed_image, transformDomainMeshSize=mesh_size, order=3
         )
         registration.SetInitialTransform(tx, inPlace=True)
-
-        # Interpolator
         registration.SetInterpolator(sitk.sitkLinear)
 
-        # Execute
         final_transform = registration.Execute(fixed_image, moving_image)
 
-        # Convert to displacement field for uniform handling
         displacement_filter = sitk.TransformToDisplacementFieldFilter()
         displacement_filter.SetReferenceImage(fixed_image)
-        displacement_field = displacement_filter.Execute(final_transform)
+        displacement_field_image = displacement_filter.Execute(final_transform)
 
-        return sitk.DisplacementFieldTransform(displacement_field)
+        return displacement_field_image
 
     else:
-        raise ValueError(f"Unknown method: {method}. Use 'bspline' or 'demons'.")
+        raise ValueError(f"Unknown method: {method}. Use 'demons' or 'bspline'.")
 
 
 def warp_mesh_vertices(
@@ -178,12 +184,9 @@ def warp_mesh_vertices(
 ) -> np.ndarray:
     """Warp mesh vertices using a SimpleITK displacement field.
 
-    The displacement field maps template space → target space.
-    Vertices are in mm (physical coordinates matching the NIfTI).
-
     Parameters
     ----------
-    vertices_mm : (N, 3) array of vertex positions in mm
+    vertices_mm : (N, 3) array of vertex positions in mm (physical space)
     displacement_field : SimpleITK displacement field image
 
     Returns
@@ -191,33 +194,32 @@ def warp_mesh_vertices(
     (N, 3) array of warped vertex positions in mm
     """
     # Convert displacement field to numpy
-    # Shape: (Z, Y, X, 3) — SimpleITK stores as ZYX
+    # SimpleITK GetArrayFromImage returns (Z, Y, X, 3) for vector images
+    # The 3 components are in (X, Y, Z) order within each voxel
     disp_np = sitk.GetArrayFromImage(displacement_field)  # (Z, Y, X, 3)
 
     # Get image geometry
-    origin = np.array(displacement_field.GetOrigin())      # (X, Y, Z)
-    spacing = np.array(displacement_field.GetSpacing())     # (X, Y, Z)
+    origin = np.array(displacement_field.GetOrigin())       # (X, Y, Z) in mm
+    spacing = np.array(displacement_field.GetSpacing())      # (X, Y, Z)
     direction = np.array(displacement_field.GetDirection()).reshape(3, 3)
-
-    # Convert physical coordinates (mm) to voxel coordinates
-    # physical = origin + direction @ (voxel * spacing)
-    # voxel = inv(direction) @ ((physical - origin) / spacing)
-    # But for axis-aligned images (identity direction), simplifies to:
-    # voxel = (physical - origin) / spacing
     inv_direction = np.linalg.inv(direction)
 
     warped = np.zeros_like(vertices_mm)
 
     for i in range(len(vertices_mm)):
-        # Physical to continuous voxel index
-        phys = vertices_mm[i]  # (X, Y, Z)
-        voxel_xyz = inv_direction @ ((phys - origin) / spacing)
+        # Physical (mm) to continuous voxel index
+        phys_xyz = vertices_mm[i]  # (X, Y, Z)
+        voxel_xyz = inv_direction @ ((phys_xyz - origin) / spacing)
 
-        # Interpolate displacement at this voxel location
-        # disp_np is (Z, Y, X, 3), so we need ZYX indexing
-        voxel_zyx = voxel_xyz[::-1]
+        # For scipy map_coordinates, we need (Z, Y, X) indexing
+        voxel_zyx = np.array([voxel_xyz[2], voxel_xyz[1], voxel_xyz[0]])
+
+        # Clamp to valid range
+        shape_zyx = np.array(disp_np.shape[:3], dtype=float) - 1
+        voxel_zyx = np.clip(voxel_zyx, 0, shape_zyx)
 
         # Trilinear interpolation for each displacement component
+        # Components in displacement field are (X, Y, Z)
         dx = map_coordinates(disp_np[..., 0], voxel_zyx.reshape(3, 1),
                              order=1, mode='nearest')[0]
         dy = map_coordinates(disp_np[..., 1], voxel_zyx.reshape(3, 1),
@@ -225,8 +227,8 @@ def warp_mesh_vertices(
         dz = map_coordinates(disp_np[..., 2], voxel_zyx.reshape(3, 1),
                              order=1, mode='nearest')[0]
 
-        # Apply displacement (in physical coordinates)
-        warped[i] = phys + np.array([dx, dy, dz])
+        # Apply displacement
+        warped[i] = phys_xyz + np.array([dx, dy, dz])
 
     return warped
 
@@ -269,10 +271,20 @@ def register_all_frames(
     print(f"  Output: {output_dir}")
 
     # Load template image and mesh
-    print(f"\n  Loading template segmentation...")
+    print(f"\n  Loading template segmentation (signed distance transform)...")
     fixed_image = load_segmentation_as_sitk(str(template_nifti), label)
 
-    print(f"  Loading template mesh...")
+    # Print image info
+    print(f"  Image size: {fixed_image.GetSize()}")
+    print(f"  Image spacing (mm): {fixed_image.GetSpacing()}")
+    print(f"  Image origin (mm): {fixed_image.GetOrigin()}")
+
+    # Check that signed distance has reasonable range
+    stats = sitk.StatisticsImageFilter()
+    stats.Execute(fixed_image)
+    print(f"  Distance map range: [{stats.GetMinimum():.2f}, {stats.GetMaximum():.2f}] mm")
+
+    print(f"\n  Loading template mesh...")
     template_mesh = trimesh.load(str(template_mesh_path), force="mesh")
     template_vertices = template_mesh.vertices.copy()  # in mm
     template_faces = template_mesh.faces.copy()
@@ -280,6 +292,7 @@ def register_all_frames(
     n_verts = len(template_vertices)
     n_faces = len(template_faces)
     print(f"  Template: {n_verts:,} vertices, {n_faces:,} faces")
+    print(f"  Vertex bounds (mm): min={template_vertices.min(axis=0).round(1)}, max={template_vertices.max(axis=0).round(1)}")
 
     # Find all prediction frames
     pred_files = sorted(predictions_dir.glob("patient006_frame*.nii.gz"))
@@ -319,26 +332,23 @@ def register_all_frames(
         # Load target frame
         moving_image = load_segmentation_as_sitk(str(pred_file), label)
 
-        # Register
+        # Register — returns displacement field IMAGE
         try:
-            disp_transform = register_to_template(fixed_image, moving_image, method)
+            disp_field_image = register_to_template(fixed_image, moving_image, method)
 
-            # Get displacement field as image
-            if isinstance(disp_transform, sitk.DisplacementFieldTransform):
-                disp_field = disp_transform.GetDisplacementField()
-            else:
-                # Convert transform to displacement field
-                disp_filter = sitk.TransformToDisplacementFieldFilter()
-                disp_filter.SetReferenceImage(fixed_image)
-                disp_field = disp_filter.Execute(disp_transform)
+            # Quick stats on the displacement field
+            disp_np = sitk.GetArrayFromImage(disp_field_image)
+            disp_mag = np.sqrt(disp_np[..., 0]**2 + disp_np[..., 1]**2 + disp_np[..., 2]**2)
+            print(f"\n    Field max magnitude: {disp_mag.max():.2f} mm", end=" ")
 
             # Warp template vertices
-            warped_vertices = warp_mesh_vertices(template_vertices, disp_field)
+            warped_vertices = warp_mesh_vertices(template_vertices, disp_field_image)
 
             # Compute displacement statistics
             displacements = np.linalg.norm(warped_vertices - template_vertices, axis=1)
             max_disp = float(displacements.max())
             mean_disp = float(displacements.mean())
+            median_disp = float(np.median(displacements))
 
             # Create warped mesh with same topology
             warped_mesh = trimesh.Trimesh(
@@ -348,19 +358,19 @@ def register_all_frames(
             )
             warped_mesh.export(str(out_stl))
 
-            print(f"done (max disp: {max_disp:.2f} mm, mean: {mean_disp:.2f} mm)")
+            print(f"| Mesh max: {max_disp:.2f} mm, mean: {mean_disp:.2f} mm")
 
             metadata["frames"][frame_name] = {
                 "type": "registered",
                 "max_displacement_mm": max_disp,
                 "mean_displacement_mm": mean_disp,
+                "median_displacement_mm": median_disp,
             }
-
-            # Optionally save displacement field for debugging
-            # sitk.WriteImage(disp_field, str(frame_dir / "displacement_field.nii.gz"))
 
         except Exception as e:
             print(f"FAILED: {e}")
+            import traceback
+            traceback.print_exc()
             metadata["frames"][frame_name] = {
                 "type": "failed",
                 "error": str(e),
@@ -371,21 +381,27 @@ def register_all_frames(
     with open(meta_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    print(f"\n  Metadata saved: {meta_path}")
+    # Print summary
+    print(f"\n=== Registration Summary ===")
+    disps = [
+        f["max_displacement_mm"]
+        for f in metadata["frames"].values()
+        if f.get("type") == "registered"
+    ]
+    if disps:
+        print(f"  Max displacement range: {min(disps):.2f} — {max(disps):.2f} mm")
+        print(f"  Mean of max displacements: {np.mean(disps):.2f} mm")
+    failed = sum(1 for f in metadata["frames"].values() if f.get("type") == "failed")
+    if failed:
+        print(f"  WARNING: {failed} frames failed registration")
+    print(f"  Metadata saved: {meta_path}")
     print(f"  Done. {len(metadata['frames'])} frames processed.")
 
     return metadata
 
 
 def verify_consistency(registered_dir: str):
-    """Verify that all registered meshes have consistent topology.
-
-    Checks:
-    - All meshes have the same vertex count
-    - All meshes have the same face count
-    - All meshes have identical face connectivity
-    - No degenerate faces
-    """
+    """Verify that all registered meshes have consistent topology."""
     registered_dir = Path(registered_dir)
 
     print(f"\n=== Verifying Mesh Consistency ===")
@@ -415,7 +431,6 @@ def verify_consistency(registered_dir: str):
         nfaces = len(mesh.faces)
         faces_match = np.array_equal(mesh.faces, ref_faces)
 
-        # Check for degenerate faces
         areas = mesh.area_faces
         n_degenerate = int((areas < 1e-12).sum())
 
