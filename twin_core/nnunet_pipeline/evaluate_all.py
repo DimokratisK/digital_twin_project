@@ -106,9 +106,10 @@ def rerun_validation_with_best(config: str, fold: int, device: str = "cpu"):
     out_dir = fold_dir / "validation_best"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Run prediction
+    # Run prediction via nnUNetv2_predict CLI entry point
+    # (NOT python -m, which runs __main__ with hardcoded example paths)
     cmd = [
-        sys.executable, "-m", "nnunetv2.inference.predict_from_raw_data",
+        "nnUNetv2_predict",
         "-i", str(tmp_input),
         "-o", str(out_dir),
         "-d", str(DATASET_ID),
