@@ -56,7 +56,7 @@ def make_3panel_figure(
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
 
     for ax, mask, title in [
-        (ax1, unet_slice, "Custom UNet (epoch 40)"),
+        (ax1, unet_slice, "UNet (epoch 40)"),
         (ax2, nnunet_slice, "nnU-Net 2D"),
         (ax3, gt_slice, "Ground Truth"),
     ]:
