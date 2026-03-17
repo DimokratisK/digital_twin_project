@@ -77,31 +77,53 @@ def make_3panel_figure(
     return fig
 
 
+def _pad_to_multiple_2d(arr, multiple=16):
+    """Pad a 2D array so H and W are multiples of `multiple`. Returns (padded, pad_tuple)."""
+    h, w = arr.shape
+    pad_h = (multiple - (h % multiple)) % multiple
+    pad_w = (multiple - (w % multiple)) % multiple
+    pad_top, pad_bottom = pad_h // 2, pad_h - pad_h // 2
+    pad_left, pad_right = pad_w // 2, pad_w - pad_w // 2
+    padded = np.pad(arr, ((pad_top, pad_bottom), (pad_left, pad_right)),
+                    mode="constant", constant_values=0)
+    return padded, (pad_top, pad_bottom, pad_left, pad_right)
+
+
+def _unpad_2d(arr, pad):
+    """Remove padding given (top, bottom, left, right)."""
+    t, b, l, r = pad
+    h, w = arr.shape
+    return arr[t:h - b if b else h, l:w - r if r else w]
+
+
 def run_unet_inference(image_3d: np.ndarray, checkpoint_path: str, device: str = "cpu") -> np.ndarray:
     """Run custom UNet inference on a 3D volume (X, Y, Z) -> labels (X, Y, Z)."""
     import torch
     from twin_core.utils.segmentation_model import load_model
-    from twin_core.utils.segmentation_inference import segment_volume
 
     model = load_model(checkpoint_path, device=device, n_classes=4)
 
-    # image_3d is (X, Y, Z) from nibabel — segment_volume expects (Z, H, W)
-    volume_zhw = np.transpose(image_3d, (2, 0, 1))  # (Z, X, Y)
+    # image_3d is (X, Y, Z) from nibabel — we process slice by slice along Z
+    volume_zhw = np.transpose(image_3d, (2, 0, 1)).astype(np.float32)  # (Z, X, Y)
 
-    # Normalize each slice to [0, 1]
-    volume_norm = np.zeros_like(volume_zhw, dtype=np.float32)
-    for z in range(volume_zhw.shape[0]):
-        s = volume_zhw[z].astype(np.float32)
-        smin, smax = s.min(), s.max()
-        if smax > smin:
-            s = (s - smin) / (smax - smin)
-        volume_norm[z] = s
+    labels_list = []
+    with torch.no_grad():
+        for z in range(volume_zhw.shape[0]):
+            s = volume_zhw[z]
+            # Normalize to [0, 1]
+            smin, smax = s.min(), s.max()
+            if smax > smin:
+                s = (s - smin) / (smax - smin)
+            # Pad to multiple of 16
+            s_padded, pad = _pad_to_multiple_2d(s, 16)
+            x = torch.from_numpy(s_padded).float().unsqueeze(0).unsqueeze(0).to(device)
+            logits = model(x)
+            lbl_padded = logits.softmax(dim=1).argmax(dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
+            labels_list.append(_unpad_2d(lbl_padded, pad))
 
-    labels_zhw = segment_volume(model, volume_norm, device=device, batch_slices=8)
-
+    labels_zhw = np.stack(labels_list, axis=0)
     # Back to (X, Y, Z)
-    labels_xyz = np.transpose(labels_zhw, (1, 2, 0))
-    return labels_xyz
+    return np.transpose(labels_zhw, (1, 2, 0))
 
 
 def pick_best_slices(gt: np.ndarray, n: int = 3) -> List[int]:
