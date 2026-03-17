@@ -119,7 +119,9 @@ def rerun_validation_with_best(config: str, fold: int, device: str = "cpu"):
         "-device", device,
     ]
     print(f"  Running: {' '.join(cmd[-8:])}")
-    result = subprocess.run(cmd, env=os.environ.copy())
+    env = os.environ.copy()
+    env["nnUNet_compile"] = "false"  # torch.compile crashes on CPU for 3D models
+    result = subprocess.run(cmd, env=env)
 
     # Cleanup temp dir
     shutil.rmtree(tmp_input, ignore_errors=True)
