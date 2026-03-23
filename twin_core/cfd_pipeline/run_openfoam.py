@@ -61,17 +61,17 @@ def check_openfoam_installed() -> bool:
 
 
 def run_meshing(case_dir: str) -> bool:
-    """Run blockMesh, surfaceFeatureExtract, and snappyHexMesh."""
+    """Run blockMesh, surfaceFeatures, and snappyHexMesh."""
     cwd = str(case_dir)
 
     if not _run_command(["blockMesh"], cwd, "Background mesh (blockMesh)"):
         return False
 
     # Feature extraction for edge refinement (optional — skip if dict missing)
-    sfe_dict = Path(case_dir) / "system" / "surfaceFeatureExtractDict"
+    sfe_dict = Path(case_dir) / "system" / "surfaceFeaturesDict"
     if sfe_dict.exists():
         if not _run_command(
-            ["surfaceFeatureExtract"], cwd, "Surface feature extraction"
+            ["surfaceFeatures"], cwd, "Surface feature extraction"
         ):
             return False
 
