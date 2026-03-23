@@ -525,6 +525,10 @@ castellatedMeshControls
 
     features
     (
+        {{
+            file "{Path(stl_filename).stem}.eMesh";
+            level {refinement_level + 1};
+        }}
     );
 
     refinementSurfaces
@@ -541,12 +545,12 @@ castellatedMeshControls
                 }}
                 inlet
                 {{
-                    level ({refinement_level} {refinement_level});
+                    level ({refinement_level + 1} {refinement_level + 2});
                     patchInfo {{ type patch; }}
                 }}
                 outlet
                 {{
-                    level ({refinement_level} {refinement_level});
+                    level ({refinement_level + 1} {refinement_level + 2});
                     patchInfo {{ type patch; }}
                 }}
             }}
@@ -605,9 +609,9 @@ meshQualityControls
     maxBoundarySkewness 20;
     maxInternalSkewness 4;
     maxConcave      80;
-    minVol          1e-13;
+    minVol          1e-09;
     minTetQuality   -1e30;
-    minArea         -1;
+    minArea         1e-08;
     minTwist        0.02;
     minDeterminant  0.001;
     minFaceWeight   0.05;
@@ -619,6 +623,24 @@ meshQualityControls
 
 writeFormat ascii;
 mergeTolerance 1e-6;
+"""
+
+
+def generate_surface_feature_extract_dict(stl_filename: str) -> str:
+    """Generate surfaceFeatureExtractDict for edge refinement near valve openings."""
+    header = _OPENFOAM_HEADER.format(
+        class_name="dictionary", object_name="surfaceFeatureExtractDict"
+    )
+    return f"""{header}
+{stl_filename}
+{{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs
+    {{
+        includedAngle   150;
+    }}
+    writeObj            yes;
+}}
 """
 
 
@@ -741,19 +763,22 @@ def generate_run_script_dynamic(n_processors: int = 32) -> str:
 
 set -e
 
-echo "=== Step 1/5: Background mesh (blockMesh) ==="
+echo "=== Step 1/6: Background mesh (blockMesh) ==="
 blockMesh
 
-echo "=== Step 2/5: Volume mesh from STL (snappyHexMesh) ==="
+echo "=== Step 2/6: Extract surface features for edge refinement ==="
+surfaceFeatureExtract
+
+echo "=== Step 3/6: Volume mesh from STL (snappyHexMesh) ==="
 snappyHexMesh -overwrite
 
-echo "=== Step 3/5: Decompose for parallel run ==="
+echo "=== Step 4/6: Decompose for parallel run ==="
 decomposePar
 
-echo "=== Step 4/5: Solve (pimpleFoam with dynamic mesh) ==="
+echo "=== Step 5/6: Solve (pimpleFoam with dynamic mesh) ==="
 mpirun -np {n_processors} pimpleFoam -parallel
 
-echo "=== Step 5/5: Reconstruct and post-process ==="
+echo "=== Step 6/6: Reconstruct and post-process ==="
 reconstructPar
 postProcess -func wallShearStress
 
@@ -920,6 +945,10 @@ def create_dynamic_case(
     _write_file(
         system_dir / "snappyHexMeshDict",
         generate_snappy_hex_mesh_dict(stl_filename, bbox, refinement_level, n_surface_layers),
+    )
+    _write_file(
+        system_dir / "surfaceFeatureExtractDict",
+        generate_surface_feature_extract_dict(stl_filename),
     )
     _write_file(
         system_dir / "controlDict",

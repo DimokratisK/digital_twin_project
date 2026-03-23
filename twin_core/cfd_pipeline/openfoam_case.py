@@ -299,9 +299,9 @@ meshQualityControls
     maxBoundarySkewness 20;
     maxInternalSkewness 4;
     maxConcave      80;
-    minVol          1e-13;
+    minVol          1e-09;
     minTetQuality   -1e30;
-    minArea         -1;
+    minArea         1e-08;
     minTwist        0.02;
     minDeterminant  0.001;
     minFaceWeight   0.05;
