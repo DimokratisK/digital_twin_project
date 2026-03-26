@@ -280,6 +280,14 @@ libs            ("libfvMotionSolvers.so");
 
 functions
 {{
+    writePoints
+    {{
+        type            writeObjects;
+        libs            ("libutilityFunctionObjects.so");
+        writeControl    writeTime;
+        objects         (pointDisplacement);
+    }}
+
     wallShearStress
     {{
         type            wallShearStress;
