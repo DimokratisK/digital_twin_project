@@ -280,12 +280,11 @@ libs            ("libfvMotionSolvers.so");
 
 functions
 {{
-    writePoints
+    writeMesh
     {{
-        type            writeObjects;
-        libs            ("libutilityFunctionObjects.so");
+        type            writeMesh;
+        libs            ("libfieldFunctionObjects.so");
         writeControl    writeTime;
-        objects         (pointDisplacement);
     }}
 
     wallShearStress
@@ -778,9 +777,8 @@ decomposePar
 echo "=== Step 4/5: Solve (pimpleFoam with dynamic mesh) ==="
 mpirun -np {n_processors} pimpleFoam -parallel
 
-echo "=== Step 5/5: Reconstruct and post-process ==="
-reconstructPar
-postProcess -func wallShearStress
+echo "=== Step 5/5: Reconstruct ==="
+reconstructPar -withMesh
 
 echo "=== Done. Results ready for analysis. ==="
 """
