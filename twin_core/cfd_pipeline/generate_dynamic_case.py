@@ -250,7 +250,7 @@ def generate_control_dict_dynamic(
         class_name="dictionary", object_name="controlDict"
     )
     return f"""{header}
-application     pimpleFoam;
+application     foamRun;
 
 startFrom       startTime;
 startTime       0;
@@ -280,12 +280,6 @@ libs            ("libfvMotionSolvers.so");
 
 functions
 {{
-    writeMesh
-    {{
-        type            writeMesh;
-        libs            ("libfieldFunctionObjects.so");
-        writeControl    writeTime;
-    }}
 
     wallShearStress
     {{
@@ -774,8 +768,8 @@ snappyHexMesh -overwrite
 echo "=== Step 3/5: Decompose for parallel run ==="
 decomposePar
 
-echo "=== Step 4/5: Solve (pimpleFoam with dynamic mesh) ==="
-mpirun -np {n_processors} pimpleFoam -parallel
+echo "=== Step 4/5: Solve (foamRun incompressibleFluid with dynamic mesh) ==="
+mpirun -np {n_processors} foamRun -solver incompressibleFluid -parallel
 
 echo "=== Step 5/5: Reconstruct ==="
 reconstructPar -withMesh
