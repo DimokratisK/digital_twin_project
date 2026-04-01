@@ -388,6 +388,20 @@ solvers
         smoother        GaussSeidel;
     }}
 
+    pcorr
+    {{
+        solver          GAMG;
+        tolerance       1e-02;
+        relTol          0;
+        smoother        GaussSeidel;
+    }}
+
+    pcorrFinal
+    {{
+        $pcorr;
+        tolerance       1e-04;
+    }}
+
     p
     {{
         solver          GAMG;
