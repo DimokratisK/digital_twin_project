@@ -177,15 +177,16 @@ def generate_dynamic_mesh_dict() -> str:
         class_name="dictionary", object_name="dynamicMeshDict"
     )
     return f"""{header}
-dynamicFvMesh    dynamicMotionSolverFvMesh;
-
-motionSolverLibs ("libfvMotionSolvers.so");
-
-motionSolver    displacementLaplacian;
-
-displacementLaplacianCoeffs
+mover
 {{
-    diffusivity     inverseDistance (wall);
+    type            motionSolver;
+
+    motionSolver    displacementLaplacian;
+
+    displacementLaplacianCoeffs
+    {{
+        diffusivity     inverseDistance (wall);
+    }}
 }}
 """
 
@@ -280,12 +281,12 @@ libs            ("libfvMotionSolvers.so");
 
 functions
 {{
-    writeCellDisplacement
+    writeMeshPoints
     {{
         type            writeObjects;
         libs            ("libutilityFunctionObjects.so");
         writeControl    writeTime;
-        objects         (cellDisplacement);
+        objects         (points);
     }}
 
     wallShearStress
@@ -779,7 +780,7 @@ echo "=== Step 4/5: Solve (foamRun incompressibleFluid with dynamic mesh) ==="
 mpirun -np {n_processors} foamRun -solver incompressibleFluid -parallel
 
 echo "=== Step 5/5: Reconstruct ==="
-reconstructPar -withMesh
+reconstructPar
 
 echo "=== Done. Results ready for analysis. ==="
 """
