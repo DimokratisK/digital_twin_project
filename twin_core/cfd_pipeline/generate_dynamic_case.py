@@ -520,7 +520,7 @@ mergePatchPairs
 def generate_snappy_hex_mesh_dict(
     stl_filename: str,
     bbox: Dict,
-    refinement_level: int = 3,
+    refinement_level: int = 2,
     n_surface_layers: int = 3,
 ) -> str:
     """Generate snappyHexMeshDict for multi-region STL."""
@@ -595,12 +595,12 @@ castellatedMeshControls
 
 snapControls
 {{
-    nSmoothPatch    3;
+    nSmoothPatch    5;
     tolerance       2.0;
-    nSolveIter      100;
-    nRelaxIter      5;
+    nSolveIter      200;
+    nRelaxIter      8;
     nFeatureSnapIter 10;
-    implicitFeatureSnap false;
+    implicitFeatureSnap true;
     explicitFeatureSnap true;
     multiRegionFeatureSnap false;
 }};
@@ -618,12 +618,12 @@ addLayersControls
 
     expansionRatio  1.2;
     finalLayerThickness 0.3;
-    minThickness    0.1;
+    minThickness    0.05;
     nGrow           0;
-    featureAngle    60;
-    nRelaxIter      5;
-    nSmoothSurfaceNormals 1;
-    nSmoothNormals  3;
+    featureAngle    130;
+    nRelaxIter      10;
+    nSmoothSurfaceNormals 3;
+    nSmoothNormals  5;
     nSmoothThickness 10;
     maxFaceThicknessRatio 0.5;
     maxThicknessToMedialRatio 0.3;
@@ -638,8 +638,8 @@ meshQualityControls
     maxBoundarySkewness 20;
     maxInternalSkewness 4;
     maxConcave      80;
-    minVol          1e-09;
-    minTetQuality   -1e30;
+    minVol          1e-13;
+    minTetQuality   1e-15;
     minArea         1e-08;
     minTwist        0.02;
     minDeterminant  0.001;
@@ -823,7 +823,7 @@ def create_dynamic_case(
     dt: float = 1e-6,
     n_processors: int = 32,
     cell_size: float = 2.0,
-    refinement_level: int = 3,
+    refinement_level: int = 2,
     n_surface_layers: int = 3,
 ):
     """Create a complete dynamic-mesh OpenFOAM case.
@@ -1051,7 +1051,7 @@ def main():
     )
     parser.add_argument(
         "--refinement", type=int, default=3,
-        help="Surface refinement level (default: 3)"
+        help="Surface refinement level (default: 2)"
     )
     parser.add_argument(
         "--layers", type=int, default=3,
