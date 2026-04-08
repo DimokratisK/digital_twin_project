@@ -434,13 +434,22 @@ solvers
 
 PIMPLE
 {{
-    nOuterCorrectors    2;
+    nOuterCorrectors    3;
     nCorrectors         2;
-    nNonOrthogonalCorrectors 1;
+    nNonOrthogonalCorrectors 2;
     pRefCell            0;
     pRefValue           0;
     correctPhi          yes;
-    moveMeshOuterCorrectors yes;
+    moveMeshOuterCorrectors no;
+}}
+
+relaxationFactors
+{{
+    equations
+    {{
+        "U.*"           0.7;
+        "p.*"           0.3;
+    }}
 }}
 """
 
