@@ -242,7 +242,7 @@ boundaryField
 def generate_control_dict_dynamic(
     cardiac_cycle: float = 0.8,
     num_cycles: int = 5,
-    dt: float = 1e-4,
+    dt: float = 1e-6,
     write_interval: float = 0.01,
 ) -> str:
     """Generate controlDict for dynamic mesh pimpleFoam."""
@@ -252,6 +252,7 @@ def generate_control_dict_dynamic(
     )
     return f"""{header}
 application     foamRun;
+solver          incompressibleFluid;
 
 startFrom       startTime;
 startTime       0;
@@ -274,8 +275,8 @@ timePrecision   8;
 runTimeModifiable true;
 
 adjustTimeStep  yes;
-maxCo           0.5;
-maxDeltaT       {dt * 10:.6e};
+maxCo           0.3;
+maxDeltaT       {dt * 1000:.6e};
 
 libs            ("libfvMotionSolvers.so");
 
@@ -810,7 +811,7 @@ def create_dynamic_case(
     output_dir: str,
     heart_rate_bpm: float = 75.0,
     num_cycles: int = 5,
-    dt: float = 1e-4,
+    dt: float = 1e-6,
     n_processors: int = 32,
     cell_size: float = 2.0,
     refinement_level: int = 3,
@@ -1028,8 +1029,8 @@ def main():
         help="Number of cardiac cycles (default: 5)"
     )
     parser.add_argument(
-        "--dt", type=float, default=1e-4,
-        help="Initial time step (default: 1e-4)"
+        "--dt", type=float, default=1e-6,
+        help="Initial time step (default: 1e-6)"
     )
     parser.add_argument(
         "--processors", type=int, default=32,
