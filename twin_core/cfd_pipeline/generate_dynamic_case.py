@@ -181,11 +181,11 @@ mover
 {{
     type            motionSolver;
 
-    motionSolver    displacementLaplacian;
+    motionSolver    displacementSBRStress;
 
-    displacementLaplacianCoeffs
+    displacementSBRStressCoeffs
     {{
-        diffusivity     inverseDistance (wall);
+        diffusivity     quadratic inverseDistance 1 (wall);
     }}
 }}
 """
@@ -440,7 +440,7 @@ PIMPLE
     pRefCell            0;
     pRefValue           0;
     correctPhi          yes;
-    moveMeshOuterCorrectors no;
+    moveMeshOuterCorrectors yes;
 }}
 
 relaxationFactors
