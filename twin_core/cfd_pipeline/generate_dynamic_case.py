@@ -439,7 +439,7 @@ PIMPLE
     nNonOrthogonalCorrectors 2;
     pRefCell            0;
     pRefValue           0;
-    correctPhi          yes;
+    correctPhi          no;
     moveMeshOuterCorrectors yes;
 }}
 
@@ -825,6 +825,7 @@ def create_dynamic_case(
     cell_size: float = 2.0,
     refinement_level: int = 2,
     n_surface_layers: int = 3,
+    displacement_scale: float = 1.0,
 ):
     """Create a complete dynamic-mesh OpenFOAM case.
 
@@ -837,6 +838,7 @@ def create_dynamic_case(
     num_cycles : number of cardiac cycles
     dt : initial time step
     n_processors : parallel processors (VM32 has 32)
+    displacement_scale : scale factor for displacement (0.1 = 10%, for testing)
     """
     stl_dir = Path(stl_dir)
     case_dir = Path(output_dir)
@@ -862,6 +864,14 @@ def create_dynamic_case(
     )
     n_verts = len(vertex_positions[0])
     print(f"    {n_frames} frames, {n_verts} vertices per frame")
+
+    # Apply displacement scaling (for testing mesh motion stability)
+    if displacement_scale != 1.0:
+        ref = vertex_positions[0]
+        vertex_positions = [
+            ref + (vp - ref) * displacement_scale for vp in vertex_positions
+        ]
+        print(f"    Displacement scale: {displacement_scale:.1%}")
 
     # Displacement stats
     ref = vertex_positions[0]
@@ -1057,6 +1067,10 @@ def main():
         "--layers", type=int, default=3,
         help="Boundary layer cells (default: 3)"
     )
+    parser.add_argument(
+        "--displacement-scale", type=float, default=1.0,
+        help="Scale factor for wall displacement (0.1 = 10%%, for testing)"
+    )
 
     args = parser.parse_args()
 
@@ -1071,6 +1085,7 @@ def main():
         cell_size=args.cell_size,
         refinement_level=args.refinement,
         n_surface_layers=args.layers,
+        displacement_scale=args.displacement_scale,
     )
 
 
