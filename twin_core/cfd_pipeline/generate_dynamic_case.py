@@ -907,30 +907,35 @@ def create_dynamic_case(
                 f.write(f"({v[0]:.8f} {v[1]:.8f} {v[2]:.8f})\n")
             f.write(")\n")
 
-        # Displacement at each time
-        for t, positions in zip(times, vertex_positions):
-            displacements = positions - ref
-            time_dir = boundary_data_dir / f"{t:.8f}"
+        # Displacement at each time — repeat for all cardiac cycles
+        for cycle in range(num_cycles):
+            t_offset = cycle * cardiac_cycle
+            for t, positions in zip(times, vertex_positions):
+                displacements = positions - ref
+                t_abs = t + t_offset
+                time_dir = boundary_data_dir / f"{t_abs:.8f}"
+                time_dir.mkdir(parents=True, exist_ok=True)
+                disp_path = time_dir / "pointDisplacement"
+                with open(disp_path, "w") as f:
+                    f.write(f"{len(displacements)}\n(\n")
+                    for d in displacements:
+                        f.write(f"({d[0]:.8f} {d[1]:.8f} {d[2]:.8f})\n")
+                    f.write(")\n")
+
+            # End-of-cycle = zero displacement (back to start)
+            t_end = (cycle + 1) * cardiac_cycle
+            time_dir = boundary_data_dir / f"{t_end:.8f}"
             time_dir.mkdir(parents=True, exist_ok=True)
             disp_path = time_dir / "pointDisplacement"
             with open(disp_path, "w") as f:
-                f.write(f"{len(displacements)}\n(\n")
-                for d in displacements:
+                zeros = np.zeros((n_verts, 3))
+                f.write(f"{n_verts}\n(\n")
+                for d in zeros:
                     f.write(f"({d[0]:.8f} {d[1]:.8f} {d[2]:.8f})\n")
                 f.write(")\n")
 
-        # End-of-cycle = zero displacement (back to start)
-        time_dir = boundary_data_dir / f"{cardiac_cycle:.8f}"
-        time_dir.mkdir(parents=True, exist_ok=True)
-        disp_path = time_dir / "pointDisplacement"
-        with open(disp_path, "w") as f:
-            zeros = np.zeros((n_verts, 3))
-            f.write(f"{n_verts}\n(\n")
-            for d in zeros:
-                f.write(f"({d[0]:.8f} {d[1]:.8f} {d[2]:.8f})\n")
-            f.write(")\n")
-
-    print(f"    Wrote displacement data for 3 patches × {n_frames + 1} time steps")
+    total_snapshots = num_cycles * (n_frames + 1)
+    print(f"    Wrote displacement data for 3 patches × {total_snapshots} time steps ({num_cycles} cycles)")
 
     # 5. Get boundary conditions
     bc = get_lv_boundary_conditions(
