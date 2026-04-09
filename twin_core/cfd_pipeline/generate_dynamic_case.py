@@ -383,18 +383,18 @@ solvers
 {{
     "cellDisplacement.*"
     {{
-        solver          GAMG;
+        solver          PCG;
+        preconditioner  DIC;
         tolerance       1e-06;
         relTol          0.01;
-        smoother        GaussSeidel;
     }}
 
     pcorr
     {{
-        solver          GAMG;
+        solver          PCG;
+        preconditioner  DIC;
         tolerance       1e-02;
         relTol          0;
-        smoother        GaussSeidel;
     }}
 
     pcorrFinal
@@ -405,10 +405,10 @@ solvers
 
     p
     {{
-        solver          GAMG;
+        solver          PCG;
+        preconditioner  DIC;
         tolerance       1e-06;
         relTol          0.01;
-        smoother        GaussSeidel;
     }}
 
     pFinal
