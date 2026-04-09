@@ -1050,7 +1050,7 @@ def main():
         help="Background cell size in mm (default: 2.0)"
     )
     parser.add_argument(
-        "--refinement", type=int, default=3,
+        "--refinement", type=int, default=2,
         help="Surface refinement level (default: 2)"
     )
     parser.add_argument(
