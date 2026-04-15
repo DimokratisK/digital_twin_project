@@ -195,15 +195,100 @@ def classify_faces(
     }
 
 
-def analyze_stl(stl_path: str) -> Dict:
-    """Analyze an LV STL and return base plane information."""
+def classify_la_faces(
+    mesh: trimesh.Trimesh,
+    base_center: np.ndarray,
+    base_normal: np.ndarray,
+    mv_depth_frac: float = 0.06,
+    pv_top_frac: float = 0.30,
+    mv_normal_alignment: float = 0.5,
+    pv_normal_alignment: float = 0.3,
+) -> Dict[str, np.ndarray]:
+    """Classify LA mesh faces into wall, inlet (PVs), and outlet (MV).
+
+    The LA has:
+      - 1 mitral valve outlet at the base (inferior, wider end)
+      - 4 pulmonary vein inlets at the superior/posterior wall (combined)
+
+    The MV is found the same way as the LV base (wider end via PCA).
+    PV inlets are identified as faces in the top portion of the mesh
+    (opposite from MV) whose normals point outward along the long axis,
+    indicating they are at the tips of PV stump protrusions.
+
+    Parameters
+    ----------
+    mv_depth_frac : fraction of LA length from the base to include as MV
+    pv_top_frac : fraction of LA length from the top to search for PV faces
+    mv_normal_alignment : min dot(face_normal, base_normal) for MV faces
+    pv_normal_alignment : min dot(face_normal, -base_normal) for PV faces
+
+    Returns
+    -------
+    dict with 'wall', 'inlet', 'outlet' keys -> boolean arrays of len(faces)
+    """
+    face_centers = mesh.triangles_center
+    face_normals = mesh.face_normals
+
+    # Project face centers onto the long axis (base_normal points apex->base)
+    to_face = face_centers - base_center
+    dist_along = to_face @ base_normal
+
+    # Total extent along long axis
+    to_vert = mesh.vertices - base_center
+    vert_dist = to_vert @ base_normal
+    total_extent = vert_dist.max() - vert_dist.min()
+
+    # --- MV outlet: faces near the base, normals pointing outward ---
+    mv_depth = mv_depth_frac * total_extent
+    near_base = dist_along > -mv_depth
+    mv_alignment = face_normals @ base_normal
+    outlet_mask = near_base & (mv_alignment > mv_normal_alignment)
+
+    # --- PV inlets: faces in the top portion, normals pointing away (upward) ---
+    # The PV stumps are at the opposite end from the MV base.
+    # base_normal points toward the base (MV), so -base_normal points toward PVs.
+    apex_direction = -base_normal
+    pv_threshold = vert_dist.min() + pv_top_frac * total_extent
+    # dist_along is relative to base_center along base_normal;
+    # faces far from the base in the negative direction are near the apex/PVs
+    near_top = dist_along < pv_threshold
+
+    # PV stump tips have normals pointing outward along the apex direction
+    pv_alignment = face_normals @ apex_direction
+    inlet_mask = near_top & (pv_alignment > pv_normal_alignment)
+
+    # Remove any overlap (shouldn't happen but be safe)
+    inlet_mask = inlet_mask & ~outlet_mask
+
+    wall_mask = ~(inlet_mask | outlet_mask)
+
+    # Sanity check: if we found very few PV faces, relax the criteria
+    if inlet_mask.sum() < 50:
+        print(f"  Warning: only {inlet_mask.sum()} PV faces found, relaxing criteria")
+        # Relax: use position-only in top 15%
+        tight_threshold = vert_dist.min() + 0.15 * total_extent
+        inlet_mask = (dist_along < tight_threshold) & ~outlet_mask
+        wall_mask = ~(inlet_mask | outlet_mask)
+
+    return {
+        "wall": wall_mask,
+        "inlet": inlet_mask,
+        "outlet": outlet_mask,
+    }
+
+
+def analyze_stl(stl_path: str, chamber: str = "lv") -> Dict:
+    """Analyze a cardiac chamber STL and return base plane information."""
     mesh = trimesh.load(str(stl_path), force="mesh")
 
     base_center, base_normal, long_axis = find_chamber_base(mesh)
     bounds = mesh.bounds
 
     # Quick face classification to show counts
-    regions = classify_faces(mesh, base_center, base_normal)
+    if chamber == "la":
+        regions = classify_la_faces(mesh, base_center, base_normal)
+    else:
+        regions = classify_faces(mesh, base_center, base_normal)
 
     return {
         "file": str(stl_path),
@@ -360,6 +445,7 @@ def prepare_valve_stl(
     scale_to_metres: bool = True,
     base_depth_frac: float = 0.05,
     inlet_angle_range: float = 220.0,
+    chamber: str = "lv",
 ) -> Dict:
     """Full pipeline: load STL, find base, classify faces, write multi-region STL.
 
@@ -370,6 +456,7 @@ def prepare_valve_stl(
     scale_to_metres : if True, scale coordinates by 0.001 (mm → m)
     base_depth_frac : fraction of LV length to treat as base region
     inlet_angle_range : angular span (degrees) for inlet (MV) region
+    chamber : 'lv' or 'la'
 
     Returns
     -------
@@ -377,7 +464,7 @@ def prepare_valve_stl(
     """
     mesh = trimesh.load(str(stl_path), force="mesh")
 
-    print(f"\n=== Preparing valve openings ===")
+    print(f"\n=== Preparing valve openings ({chamber.upper()}) ===")
     print(f"  Input: {stl_path}")
     print(f"  Faces: {len(mesh.faces):,}")
     print(f"  Vertices: {len(mesh.vertices):,}")
@@ -388,11 +475,17 @@ def prepare_valve_stl(
     print(f"  Base normal: [{base_normal[0]:.3f}, {base_normal[1]:.3f}, {base_normal[2]:.3f}]")
 
     # Classify faces
-    regions = classify_faces(
-        mesh, base_center, base_normal,
-        base_depth_frac=base_depth_frac,
-        inlet_angle_range=inlet_angle_range,
-    )
+    if chamber == "la":
+        regions = classify_la_faces(
+            mesh, base_center, base_normal,
+            mv_depth_frac=base_depth_frac,
+        )
+    else:
+        regions = classify_faces(
+            mesh, base_center, base_normal,
+            base_depth_frac=base_depth_frac,
+            inlet_angle_range=inlet_angle_range,
+        )
 
     # Write multi-region STL
     scale = 0.001 if scale_to_metres else 1.0
@@ -443,14 +536,19 @@ def main():
     )
     parser.add_argument(
         "--inlet-angle", type=float, default=220.0,
-        help="Angular span for inlet/MV in degrees (default: 220)"
+        help="Angular span for inlet/MV in degrees (default: 220, LV only)"
+    )
+    parser.add_argument(
+        "--chamber", type=str, default="lv", choices=["la", "lv"],
+        help="Chamber type: 'lv' (default) or 'la'"
     )
 
     args = parser.parse_args()
 
     if args.analyze:
-        info = analyze_stl(args.analyze)
-        print(f"\n=== LV Geometry Analysis ===")
+        info = analyze_stl(args.analyze, chamber=args.chamber)
+        chamber_label = args.chamber.upper()
+        print(f"\n=== {chamber_label} Geometry Analysis ===")
         print(f"  File: {info['file']}")
         print(f"  Faces: {info['n_faces']:,}")
         print(f"  Vertices: {info['n_vertices']:,}")
@@ -461,8 +559,12 @@ def main():
         print(f"  Base normal: [{info['base_normal'][0]:.3f}, {info['base_normal'][1]:.3f}, {info['base_normal'][2]:.3f}]")
         print(f"  Long axis: [{info['long_axis'][0]:.3f}, {info['long_axis'][1]:.3f}, {info['long_axis'][2]:.3f}]")
         print(f"  Face classification:")
-        print(f"    Inlet (MV):  {info['inlet_faces']:,} faces")
-        print(f"    Outlet (AV): {info['outlet_faces']:,} faces")
+        if args.chamber == "la":
+            print(f"    Inlet (PVs): {info['inlet_faces']:,} faces")
+            print(f"    Outlet (MV): {info['outlet_faces']:,} faces")
+        else:
+            print(f"    Inlet (MV):  {info['inlet_faces']:,} faces")
+            print(f"    Outlet (AV): {info['outlet_faces']:,} faces")
         print(f"    Wall:        {info['wall_faces']:,} faces")
         return
 
@@ -476,6 +578,7 @@ def main():
             scale_to_metres=not args.no_scale,
             base_depth_frac=args.base_depth,
             inlet_angle_range=args.inlet_angle,
+            chamber=args.chamber,
         )
 
         if args.toposet_dir:
