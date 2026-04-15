@@ -147,7 +147,8 @@ def repair_for_cfd(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Remove degenerate and duplicate faces
-    mesh.remove_degenerate_faces()
+    mask = mesh.nondegenerate_faces()
+    mesh.update_faces(mask)
     mesh.remove_duplicate_faces()
     mesh.remove_infinite_values()
     mesh.remove_unreferenced_vertices()
