@@ -74,7 +74,7 @@ def check_mesh_quality(stl_path: str) -> Dict:
     if degenerate > 0:
         issues.append(f"{degenerate} degenerate (zero-area) faces")
 
-    # Duplicate faces
+    # Duplicate faces 
     try:
         unique_faces = set(map(tuple, np.sort(mesh.faces, axis=1).tolist()))
         duplicate = face_count - len(unique_faces)
@@ -92,7 +92,7 @@ def check_mesh_quality(stl_path: str) -> Dict:
     else:
         aspect_ratio_max = None
 
-    # Bounding box
+    # Bounding box 
     bounds_min = mesh.bounds[0].tolist()
     bounds_max = mesh.bounds[1].tolist()
     extents = mesh.extents.tolist()
@@ -146,12 +146,9 @@ def repair_for_cfd(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Remove degenerate and duplicate faces
-    mask = mesh.nondegenerate_faces()
-    mesh.update_faces(mask)
-    mesh.remove_duplicate_faces()
-    mesh.remove_infinite_values()
-    mesh.remove_unreferenced_vertices()
+    # Step 1: Clean up degenerate/duplicate faces and unreferenced vertices
+    # Re-creating with process=True handles all cleanup in one shot
+    mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces, process=True)
 
     # Step 2: Fix normals
     mesh.fix_normals()
