@@ -184,9 +184,7 @@ def repair_for_cfd(
             mesh = simplified
 
     # Final cleanup
-    mesh.remove_degenerate_faces()
-    mesh.remove_duplicate_faces()
-    mesh.remove_unreferenced_vertices()
+    mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces, process=True)
     mesh.fix_normals()
 
     # Export
