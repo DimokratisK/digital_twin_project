@@ -181,11 +181,11 @@ mover
 {{
     type            motionSolver;
 
-    motionSolver    displacementSBRStress;
+    motionSolver    displacementLaplacian;
 
-    displacementSBRStressCoeffs
+    displacementLaplacianCoeffs
     {{
-        diffusivity     quadratic inverseDistance 1 (wall);
+        diffusivity     inverseDistance 1 (wall);
     }}
 }}
 """
