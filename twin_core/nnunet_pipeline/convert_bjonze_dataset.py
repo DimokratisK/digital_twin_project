@@ -1,22 +1,22 @@
 """
-Convert the Bjonze PV+LAA labelmaps (over ImageCAS CCTA images) to nnU-Net v2 format.
+Convert the Bjonze labelmaps (over ImageCAS CCTA images) to nnU-Net v2 format.
 
 The Bjonze dataset (Hansen et al., STACOM 2025) provides 10-class labelmaps computed
-on the public ImageCAS CCTA cohort. For our cardiac digital twin we only need the two
-classes ImageCAS/TSHC licensing lets us use AND that are relevant for LA+PV modelling:
+on the public ImageCAS CCTA cohort. All 10 foreground classes are preserved —
+identity remap, nothing dropped:
 
-    Bjonze class → our class
-        0  Background       → 0
-        1  Myocardium       → 0   (TSHC license — cannot redistribute these as labels)
-        2  LA               → 0
-        3  LV               → 0
-        4  RA               → 0
-        5  RV               → 0
-        6  Aorta            → 0
-        7  PA               → 0
-        8  LAA              → 2   (kept)
-        9  Coronary         → 0
-        10 PV               → 1   (kept — lumped; per-vein split done downstream)
+    Bjonze class == nnU-Net label
+        0  Background
+        1  Myocardium
+        2  LA               (left atrium blood pool)
+        3  LV               (left ventricle blood pool)
+        4  RA               (right atrium blood pool)
+        5  RV               (right ventricle blood pool)
+        6  Aorta            (aorta including aortic cusp)
+        7  PA               (pulmonary artery)
+        8  LAA              (left atrial appendage)
+        9  Coronary         (left and right coronary arteries)
+        10 PV               (pulmonary veins, lumped — per-vein split downstream)
 
 Filtering:
     By default only the 685 cases listed in all_full_laa_segmentations_id.txt are
@@ -41,7 +41,7 @@ Source structure:
         801-1000/...
 
 Target structure (nnU-Net v2):
-    $nnUNet_raw/Dataset031_Bjonze_PV_LAA/
+    $nnUNet_raw/Dataset031_Bjonze/
         imagesTr/bjonze_100_0000.nii.gz
         labelsTr/bjonze_100.nii.gz
         dataset.json
@@ -75,23 +75,31 @@ from nnunetv2.paths import nnUNet_raw
 
 
 LABEL_MAPPING = {
-    0:  0,  # background
-    1:  0,  # myocardium      — TSHC license, drop
-    2:  0,  # LA              — TSHC license, drop
-    3:  0,  # LV              — TSHC license, drop
-    4:  0,  # RA              — TSHC license, drop
-    5:  0,  # RV              — TSHC license, drop
-    6:  0,  # aorta           — TSHC license, drop
-    7:  0,  # PA              — TSHC license, drop
-    8:  2,  # LAA             — keep
-    9:  0,  # coronary        — drop (not needed for LA CFD)
-    10: 1,  # PV              — keep (lumped; per-vein split done later)
+    0:  0,   # background
+    1:  1,   # myocardium
+    2:  2,   # LA
+    3:  3,   # LV
+    4:  4,   # RA
+    5:  5,   # RV
+    6:  6,   # aorta
+    7:  7,   # PA
+    8:  8,   # LAA
+    9:  9,   # coronary
+    10: 10,  # PV
 }
 
 LABEL_NAMES = {
     "background": 0,
-    "PV": 1,
-    "LAA": 2,
+    "Myocardium": 1,
+    "LA": 2,
+    "LV": 3,
+    "RA": 4,
+    "RV": 5,
+    "Aorta": 6,
+    "PA": 7,
+    "LAA": 8,
+    "Coronary": 9,
+    "PV": 10,
 }
 
 IMAGECAS_BATCHES = ["1-200", "201-400", "401-600", "601-800", "801-1000"]
@@ -120,7 +128,7 @@ def locate_imagecas_image(imagecas_root: Path, patient_id: str) -> Optional[Path
 
 
 def remap_labels(label_path: Path, output_path: Path) -> set:
-    """Load a Bjonze labelmap, remap to our 3-class scheme, save. Returns any unknown values."""
+    """Load a Bjonze labelmap, apply identity remap, save as uint8. Returns any unknown values."""
     img = nib.load(str(label_path))
     data = np.asarray(img.dataobj).astype(np.int16)
 
@@ -167,7 +175,7 @@ def convert_bjonze(
     if len(patient_ids) != expected_count:
         print(f"  WARNING: {id_file.name} has {len(patient_ids)} IDs (expected {expected_count})")
 
-    dataset_name = f"Dataset{dataset_id:03d}_Bjonze_PV_LAA"
+    dataset_name = f"Dataset{dataset_id:03d}_Bjonze"
     out_dir = Path(nnUNet_raw) / dataset_name
     out_images_tr = out_dir / "imagesTr"
     out_labels_tr = out_dir / "labelsTr"
@@ -216,11 +224,12 @@ def convert_bjonze(
         labels=LABEL_NAMES,
         num_training_cases=converted,
         file_ending=".nii.gz",
-        dataset_name="Bjonze_PV_LAA",
+        dataset_name="Bjonze",
         description=(
-            f"Pulmonary veins (lumped) + LAA on ImageCAS CCTA. Labels from Bjonze et al. "
-            f"(STACOM 2025); images from ImageCAS (Xu et al.). {converted} cases "
-            f"({'all' if use_all_cases else 'full-LAA only'})."
+            f"Full 10-class cardiac CT segmentation on ImageCAS CCTA. Labels from Bjonze "
+            f"et al. (STACOM 2025); images from ImageCAS (Xu et al.). {converted} cases "
+            f"({'all' if use_all_cases else 'full-LAA only'}). Classes: "
+            f"Myocardium, LA, LV, RA, RV, Aorta, PA, LAA, Coronary, PV."
         ),
         license="Bjonze labels: see STACOM 2025 publication. Images: ImageCAS (Kaggle, CC BY-NC-SA).",
         reference="Hansen et al., STACOM 2025; Xu et al., ImageCAS",
@@ -246,7 +255,7 @@ def convert_bjonze(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert Bjonze PV+LAA labels (over ImageCAS images) to nnU-Net v2 format"
+        description="Convert Bjonze 10-class labels (over ImageCAS images) to nnU-Net v2 format"
     )
     parser.add_argument("--bjonze_root", type=str, required=True,
                         help="Path to ImageCAS-STACOM2025-02-10-2025/ (contains info/ + segmentations/)")
