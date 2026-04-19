@@ -44,6 +44,15 @@ DATASET_LABELS = {
         "Aorta": 6,
         "PA": 7,
     },
+    "bjonze_cfd": {
+        "LA": 1,
+        "LAA": 2,
+        "PV_1": 3,
+        "PV_2": 4,
+        "PV_3": 5,
+        "PV_4": 6,
+        "PV_5": 7,
+    },
 }
 
 
