@@ -36,7 +36,7 @@ Usage:
 """
 import argparse
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import trimesh
@@ -58,13 +58,23 @@ def _pca_long_axis(vertices: np.ndarray) -> np.ndarray:
 def classify_la_multipv(
     bloodpool: trimesh.Trimesh,
     pv_meshes: List[trimesh.Trimesh],
+    mv_mesh: Optional[trimesh.Trimesh] = None,
+    laa_mesh: Optional[trimesh.Trimesh] = None,
     proximity_threshold: float = 2.0,
+    mv_proximity_threshold: Optional[float] = None,
     distal_frac: float = 0.20,
     tip_normal_alignment: float = 0.4,
     mv_depth_frac: float = 0.04,
     mv_normal_alignment: float = 0.7,
 ) -> Dict[str, np.ndarray]:
     """Return face-region masks for the blood-pool mesh.
+
+    If mv_mesh is provided, outlet_MV is classified by proximity to that probe
+    (typically LA voxels adjacent to LV voxels). Otherwise falls back to the
+    anti-PV direction heuristic.
+
+    If laa_mesh is provided, faces near the LAA are excluded from PV inlet
+    classification (forced to wall).
 
     All length parameters are in the units of the input STL (mm if from
     predictions_to_stl.py without scaling).
@@ -74,23 +84,43 @@ def classify_la_multipv(
     n_faces = len(face_centers)
 
     la_centroid = bloodpool.vertices.mean(axis=0)
+    mv_prox = mv_proximity_threshold if mv_proximity_threshold is not None else proximity_threshold
 
-    # 1. MV axis via anti-PV direction: MV is on the side of LA opposite the PVs.
-    # PCA of the blood pool picks a non-anatomical axis (skewed by PV/LAA protrusions),
-    # so anchor to the PV-to-LA direction instead.
-    pv_centroid_mean = np.mean(
-        [pv.vertices.mean(axis=0) for pv in pv_meshes], axis=0
-    )
-    mv_axis = la_centroid - pv_centroid_mean
-    mv_axis = mv_axis / np.linalg.norm(mv_axis)
+    # Pre-compute near-LAA mask if LAA probe given
+    near_laa = np.zeros(n_faces, dtype=bool)
+    if laa_mesh is not None:
+        print(f"  [LAA] KDTree ({len(laa_mesh.vertices)} vertices) + query...",
+              flush=True)
+        laa_tree = cKDTree(laa_mesh.vertices)
+        laa_dists, _ = laa_tree.query(face_centers, k=1)
+        near_laa = laa_dists < proximity_threshold
+        print(f"  [LAA] near-LAA faces: {int(near_laa.sum())}", flush=True)
 
-    face_pos_along_mv = (face_centers - la_centroid) @ mv_axis
-    mv_pos_range = face_pos_along_mv.max() - face_pos_along_mv.min()
-    # Candidate MV faces: distal end along anti-PV axis + outward-pointing normals
-    mv_pos_threshold = face_pos_along_mv.max() - mv_depth_frac * mv_pos_range
-    near_mv = face_pos_along_mv > mv_pos_threshold
-    mv_normal_aligned = (face_normals @ mv_axis) > mv_normal_alignment
-    outlet_mv = near_mv & mv_normal_aligned
+    # 1. MV classification
+    if mv_mesh is not None:
+        print(f"  [MV] KDTree ({len(mv_mesh.vertices)} vertices) + query...",
+              flush=True)
+        mv_tree = cKDTree(mv_mesh.vertices)
+        mv_dists, _ = mv_tree.query(face_centers, k=1)
+        outlet_mv = mv_dists < mv_prox
+        print(f"  [MV] near-MV faces: {int(outlet_mv.sum())}", flush=True)
+    else:
+        # Fallback: anti-PV direction heuristic
+        pv_centroid_mean = np.mean(
+            [pv.vertices.mean(axis=0) for pv in pv_meshes], axis=0
+        )
+        mv_axis = la_centroid - pv_centroid_mean
+        mv_axis = mv_axis / np.linalg.norm(mv_axis)
+
+        face_pos_along_mv = (face_centers - la_centroid) @ mv_axis
+        mv_pos_range = face_pos_along_mv.max() - face_pos_along_mv.min()
+        mv_pos_threshold = face_pos_along_mv.max() - mv_depth_frac * mv_pos_range
+        near_mv = face_pos_along_mv > mv_pos_threshold
+        mv_normal_aligned = (face_normals @ mv_axis) > mv_normal_alignment
+        outlet_mv = near_mv & mv_normal_aligned
+
+    # Never let MV overlap LAA
+    outlet_mv &= ~near_laa
 
     # 2. Per-PV inlet caps
     inlet_masks: List[np.ndarray] = []
@@ -117,10 +147,13 @@ def classify_la_multipv(
         in_distal = face_proj > pv_max - distal_frac * pv_extent
         aligned_with_tip = (face_normals @ pv_axis) > tip_normal_alignment
 
-        inlet_masks.append(near_pv & in_distal & aligned_with_tip)
+        inlet_cap = near_pv & in_distal & aligned_with_tip
+        # Exclude any LAA-adjacent faces from PV inlet (prevents LAA tip being
+        # mis-tagged as PV inlet if model confused LAA voxels with PV)
+        inlet_cap &= ~near_laa
+        inlet_masks.append(inlet_cap)
 
-    # Exclude PV tube walls from MV candidates (anti-PV axis can still
-    # hit a PV tube on the opposite side of the LA centroid)
+    # Exclude PV tube walls from MV candidates
     outlet_mv &= ~any_near_pv
 
     # 3. Compose regions with priority: inlet > outlet > wall
@@ -147,12 +180,22 @@ def main():
                     help="Blood-pool STL (single watertight surface)")
     ap.add_argument("--pv", required=True, type=Path, action="append",
                     help="Per-PV STL (repeat for each PV: --pv PV_1.stl --pv PV_2.stl ...)")
+    ap.add_argument("--mv-stl", type=Path, default=None,
+                    help="Optional MV probe STL (LA voxels adjacent to LV). "
+                         "If given, outlet_MV is classified via proximity to this probe "
+                         "instead of the anti-PV heuristic.")
+    ap.add_argument("--laa-stl", type=Path, default=None,
+                    help="Optional LAA STL. Excludes LAA-adjacent faces from PV inlet "
+                         "classification (safety net if model confused LAA with PV).")
     ap.add_argument("-o", "--output", type=Path, default=None,
                     help="Output multi-region STL (omit for --analyze)")
     ap.add_argument("--scale", type=float, default=1.0,
                     help="Vertex scale factor applied to output (0.001 = mm->m for OpenFOAM)")
     ap.add_argument("--proximity-threshold", type=float, default=2.0,
-                    help="mm: face is 'near PV' if within this distance of PV STL")
+                    help="mm: face is 'near PV/LAA' if within this distance")
+    ap.add_argument("--mv-proximity-threshold", type=float, default=None,
+                    help="mm: face is 'near MV probe' if within this distance "
+                         "(defaults to --proximity-threshold)")
     ap.add_argument("--distal-frac", type=float, default=0.20,
                     help="Fraction of PV long axis (from distal end) that is candidate inlet cap")
     ap.add_argument("--tip-normal-alignment", type=float, default=0.4,
@@ -181,9 +224,22 @@ def main():
               f"watertight={m.is_watertight}")
         pv_meshes.append(m)
 
+    mv_mesh = None
+    if args.mv_stl is not None:
+        mv_mesh = trimesh.load(str(args.mv_stl), force="mesh")
+        print(f"  loaded MV probe {args.mv_stl.name}: faces={len(mv_mesh.faces)}")
+
+    laa_mesh = None
+    if args.laa_stl is not None:
+        laa_mesh = trimesh.load(str(args.laa_stl), force="mesh")
+        print(f"  loaded LAA probe {args.laa_stl.name}: faces={len(laa_mesh.faces)}")
+
     regions = classify_la_multipv(
         bp, pv_meshes,
+        mv_mesh=mv_mesh,
+        laa_mesh=laa_mesh,
         proximity_threshold=args.proximity_threshold,
+        mv_proximity_threshold=args.mv_proximity_threshold,
         distal_frac=args.distal_frac,
         tip_normal_alignment=args.tip_normal_alignment,
         mv_depth_frac=args.mv_depth_frac,

@@ -22,6 +22,7 @@ import numpy as np
 import scipy.ndimage as ndi
 
 BJONZE_LA = 2
+BJONZE_LV = 3
 BJONZE_LAA = 8
 BJONZE_PV = 10
 
@@ -82,6 +83,12 @@ def main():
                     help="Optional: write single-label blood-pool NIfTI "
                          "(LA | LAA | all PVs fused as class 1). Feed this to "
                          "predictions_to_stl --dataset single to get BloodPool.stl.")
+    ap.add_argument("--mv-probe-output", type=Path, default=None,
+                    help="Optional: write single-label NIfTI of LA voxels adjacent "
+                         "to LV voxels (dilated) = mitral annulus region. Used as "
+                         "MV probe in classify_la_multipv.")
+    ap.add_argument("--mv-probe-dilation", type=int, default=2,
+                    help="LV dilation iterations for MV probe (default: 2)")
     ap.add_argument("--erosion-iters", type=int, default=2)
     ap.add_argument("--min-cc-voxels", type=int, default=500)
     args = ap.parse_args()
@@ -137,6 +144,22 @@ def main():
                  str(args.bloodpool_output))
         print(f"Saved blood pool: {args.bloodpool_output} "
               f"({int(bloodpool.sum())} voxels)")
+
+    if args.mv_probe_output is not None:
+        lv = pred == BJONZE_LV
+        lv_dilated = ndi.binary_dilation(lv, iterations=args.mv_probe_dilation)
+        mv_probe = (lv_dilated & la).astype(np.int16)
+        n_mv = int(mv_probe.sum())
+        if n_mv == 0:
+            print(f"WARNING: MV probe is empty (LV dilation {args.mv_probe_dilation}x "
+                  f"did not reach LA). LV voxels: {int(lv.sum())}. "
+                  "Try --mv-probe-dilation 3 or 4.")
+        else:
+            args.mv_probe_output.parent.mkdir(parents=True, exist_ok=True)
+            nib.save(nib.Nifti1Image(mv_probe, img.affine, img.header),
+                     str(args.mv_probe_output))
+            print(f"Saved MV probe: {args.mv_probe_output} "
+                  f"({n_mv} voxels, LV dilation {args.mv_probe_dilation}x)")
 
 
 if __name__ == "__main__":
