@@ -61,8 +61,8 @@ def classify_la_multipv(
     proximity_threshold: float = 2.0,
     distal_frac: float = 0.20,
     tip_normal_alignment: float = 0.4,
-    mv_depth_frac: float = 0.08,
-    mv_normal_alignment: float = 0.5,
+    mv_depth_frac: float = 0.04,
+    mv_normal_alignment: float = 0.7,
 ) -> Dict[str, np.ndarray]:
     """Return face-region masks for the blood-pool mesh.
 
@@ -75,27 +75,33 @@ def classify_la_multipv(
 
     la_centroid = bloodpool.vertices.mean(axis=0)
 
-    # 1. LA base / MV plane via PCA
-    base_center, base_normal, _ = find_chamber_base(bloodpool)
-    centered = bloodpool.vertices - la_centroid
-    vert_extent = centered @ base_normal
-    total_extent = vert_extent.max() - vert_extent.min()
+    # 1. MV axis via anti-PV direction: MV is on the side of LA opposite the PVs.
+    # PCA of the blood pool picks a non-anatomical axis (skewed by PV/LAA protrusions),
+    # so anchor to the PV-to-LA direction instead.
+    pv_centroid_mean = np.mean(
+        [pv.vertices.mean(axis=0) for pv in pv_meshes], axis=0
+    )
+    mv_axis = la_centroid - pv_centroid_mean
+    mv_axis = mv_axis / np.linalg.norm(mv_axis)
 
-    to_face = face_centers - base_center
-    dist_along_base = to_face @ base_normal
-    mv_depth = mv_depth_frac * total_extent
-    near_base = dist_along_base > -mv_depth
-    mv_alignment = face_normals @ base_normal
-    outlet_mv = near_base & (mv_alignment > mv_normal_alignment)
+    face_pos_along_mv = (face_centers - la_centroid) @ mv_axis
+    mv_pos_range = face_pos_along_mv.max() - face_pos_along_mv.min()
+    # Candidate MV faces: distal end along anti-PV axis + outward-pointing normals
+    mv_pos_threshold = face_pos_along_mv.max() - mv_depth_frac * mv_pos_range
+    near_mv = face_pos_along_mv > mv_pos_threshold
+    mv_normal_aligned = (face_normals @ mv_axis) > mv_normal_alignment
+    outlet_mv = near_mv & mv_normal_aligned
 
     # 2. Per-PV inlet caps
     inlet_masks: List[np.ndarray] = []
+    any_near_pv = np.zeros(n_faces, dtype=bool)
     for i, pv in enumerate(pv_meshes, start=1):
         print(f"  [PV_{i}] building KDTree ({len(pv.vertices)} vertices)...", flush=True)
         tree = cKDTree(pv.vertices)
         print(f"  [PV_{i}] querying {len(face_centers)} face centers...", flush=True)
         dists, _ = tree.query(face_centers, k=1)
         near_pv = dists < proximity_threshold
+        any_near_pv |= near_pv
         print(f"  [PV_{i}] near-PV faces: {int(near_pv.sum())}", flush=True)
 
         pv_axis = _pca_long_axis(pv.vertices)
@@ -112,6 +118,10 @@ def classify_la_multipv(
         aligned_with_tip = (face_normals @ pv_axis) > tip_normal_alignment
 
         inlet_masks.append(near_pv & in_distal & aligned_with_tip)
+
+    # Exclude PV tube walls from MV candidates (anti-PV axis can still
+    # hit a PV tube on the opposite side of the LA centroid)
+    outlet_mv &= ~any_near_pv
 
     # 3. Compose regions with priority: inlet > outlet > wall
     region_labels = np.full(n_faces, -1, dtype=np.int32)  # -1 = wall
