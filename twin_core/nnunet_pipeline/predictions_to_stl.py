@@ -53,6 +53,9 @@ DATASET_LABELS = {
         "PV_4": 6,
         "PV_5": 7,
     },
+    "single": {
+        "BloodPool": 1,
+    },
 }
 
 

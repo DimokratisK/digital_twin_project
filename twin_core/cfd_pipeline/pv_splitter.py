@@ -78,6 +78,10 @@ def main():
                     help="Bjonze 11-class prediction NIfTI")
     ap.add_argument("-o", "--output", required=True, type=Path,
                     help="Multi-label output NIfTI (LA=1, LAA=2, PV_1..N=3..)")
+    ap.add_argument("--bloodpool-output", type=Path, default=None,
+                    help="Optional: write single-label blood-pool NIfTI "
+                         "(LA | LAA | all PVs fused as class 1). Feed this to "
+                         "predictions_to_stl --dataset single to get BloodPool.stl.")
     ap.add_argument("--erosion-iters", type=int, default=2)
     ap.add_argument("--min-cc-voxels", type=int, default=500)
     args = ap.parse_args()
@@ -125,6 +129,14 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     nib.save(nib.Nifti1Image(out, img.affine, img.header), str(args.output))
     print(f"\nSaved: {args.output}")
+
+    if args.bloodpool_output is not None:
+        bloodpool = np.where(la | laa | pv, 1, 0).astype(np.int16)
+        args.bloodpool_output.parent.mkdir(parents=True, exist_ok=True)
+        nib.save(nib.Nifti1Image(bloodpool, img.affine, img.header),
+                 str(args.bloodpool_output))
+        print(f"Saved blood pool: {args.bloodpool_output} "
+              f"({int(bloodpool.sum())} voxels)")
 
 
 if __name__ == "__main__":
