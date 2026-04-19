@@ -55,6 +55,40 @@ def _write_file(path: Path, content: str):
         f.write(content)
 
 
+def parse_stl_region_names(stl_path: str) -> list:
+    """Return ordered list of `solid NAME` region names from an ASCII STL.
+
+    Returns [] for binary STLs or single-solid files.
+    """
+    names = []
+    try:
+        with open(stl_path, "r", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if s.startswith("solid "):
+                    names.append(s.split(None, 1)[1].strip())
+    except (UnicodeDecodeError, IOError):
+        return []
+    # Deduplicate while preserving order (STL may legitimately repeat)
+    seen = set()
+    unique = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            unique.append(n)
+    return unique
+
+
+def _classify_region(name: str) -> str:
+    """Return 'wall', 'inlet', or 'outlet' based on patch name prefix."""
+    low = name.lower()
+    if low.startswith("inlet"):
+        return "inlet"
+    if low.startswith("outlet"):
+        return "outlet"
+    return "wall"
+
+
 def generate_block_mesh_dict(bbox: Dict, cell_size: float = 2.0, bbox_in_metres: bool = False) -> str:
     """Generate blockMeshDict with a background hex mesh enclosing the STL.
 
@@ -145,6 +179,7 @@ def generate_snappy_hex_mesh_dict(
     n_surface_layers: int = 3,
     multi_region: bool = False,
     bbox_in_metres: bool = False,
+    region_names: Optional[list] = None,
 ) -> str:
     """Generate snappyHexMeshDict for STL-to-volume mesh conversion.
 
@@ -156,6 +191,9 @@ def generate_snappy_hex_mesh_dict(
     n_surface_layers : number of boundary layer cells
     multi_region : if True, STL has named regions (wall, inlet, outlet)
     bbox_in_metres : if True, bbox is already in metres (skip mm→m conversion)
+    region_names : explicit list of region names parsed from the STL. Overrides
+        the 3-patch default when multi_region=True. Each name classified by
+        prefix: inlet* → type patch, outlet* → type patch, else type wall.
     """
     surface_name = Path(stl_filename).stem
     header = _OPENFOAM_HEADER.format(
@@ -164,43 +202,47 @@ def generate_snappy_hex_mesh_dict(
 
     # Geometry section — with or without named regions
     if multi_region:
+        if region_names is None:
+            region_names = ["wall", "inlet", "outlet"]
+
+        regions_inner = "\n".join(
+            f"            {n:<6} {{ name {n}; }}" for n in region_names
+        )
         geometry_block = f"""    {stl_filename}
     {{
         type triSurfaceMesh;
         name {surface_name};
         regions
         {{
-            wall   {{ name wall; }}
-            inlet  {{ name inlet; }}
-            outlet {{ name outlet; }}
+{regions_inner}
         }}
     }}"""
+
+        region_refinement_entries = []
+        for n in region_names:
+            kind = _classify_region(n)
+            patch_type = "wall" if kind == "wall" else "patch"
+            region_refinement_entries.append(f"""                {n}
+                {{
+                    level ({refinement_level} {refinement_level});
+                    patchInfo {{ type {patch_type}; }}
+                }}""")
         refinement_block = f"""        {surface_name}
         {{
             level ({refinement_level} {refinement_level});
             regions
             {{
-                wall
-                {{
-                    level ({refinement_level} {refinement_level});
-                    patchInfo {{ type wall; }}
-                }}
-                inlet
-                {{
-                    level ({refinement_level} {refinement_level});
-                    patchInfo {{ type patch; }}
-                }}
-                outlet
-                {{
-                    level ({refinement_level} {refinement_level});
-                    patchInfo {{ type patch; }}
-                }}
+{chr(10).join(region_refinement_entries)}
             }}
         }}"""
-        layers_block = f"""        "wall"
+
+        wall_names = [n for n in region_names if _classify_region(n) == "wall"]
+        layers_block = "\n".join(
+            f"""        "{n}"
         {{
             nSurfaceLayers {n_surface_layers};
-        }}"""
+        }}""" for n in wall_names
+        )
     else:
         geometry_block = f"""    {stl_filename}
     {{
@@ -517,19 +559,27 @@ simpleCoeffs
 """
 
 
-def generate_initial_conditions_u(inlet_waveform_file: str) -> str:
-    """Generate initial velocity field (0/U) with pulsatile inlet."""
+def generate_initial_conditions_u(
+    inlet_waveform_file: str,
+    region_names: Optional[list] = None,
+) -> str:
+    """Generate initial velocity field (0/U) with pulsatile inlet(s).
+
+    If region_names is provided, emits a block per region dispatched by prefix:
+    inlet* → uniformFixedValue(tableFile), outlet* → inletOutlet, else noSlip.
+    Otherwise falls back to the legacy 3-patch (inlet/outlet/wall) layout.
+    """
     header = _OPENFOAM_HEADER.format(
         class_name="volVectorField", object_name="U"
     )
-    return f"""{header}
-dimensions      [0 1 -1 0 0 0 0];
+    if region_names is None:
+        region_names = ["inlet", "outlet", "wall"]
 
-internalField   uniform (0 0 0);
-
-boundaryField
-{{
-    inlet
+    blocks = []
+    for n in region_names:
+        kind = _classify_region(n)
+        if kind == "inlet":
+            blocks.append(f"""    {n}
     {{
         type            uniformFixedValue;
         uniformValue
@@ -538,33 +588,68 @@ boundaryField
             file    "{inlet_waveform_file}";
             outOfBounds repeat;
         }}
-    }}
-
-    outlet
+    }}""")
+        elif kind == "outlet":
+            blocks.append(f"""    {n}
     {{
         type            inletOutlet;
         inletValue      uniform (0 0 0);
         value           uniform (0 0 0);
-    }}
-
-    wall
+    }}""")
+        else:
+            blocks.append(f"""    {n}
     {{
         type            noSlip;
-    }}
+    }}""")
 
-    ".*"
-    {{
+    blocks.append("""    ".*"
+    {
         type            noSlip;
-    }}
+    }""")
+
+    return f"""{header}
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{{
+{chr(10).join(blocks)}
 }}
 """
 
 
-def generate_initial_conditions_p() -> str:
-    """Generate initial pressure field (0/p)."""
+def generate_initial_conditions_p(region_names: Optional[list] = None) -> str:
+    """Generate initial pressure field (0/p).
+
+    inlet*/wall* → zeroGradient, outlet* → fixedValue 0.
+    """
     header = _OPENFOAM_HEADER.format(
         class_name="volScalarField", object_name="p"
     )
+    if region_names is None:
+        region_names = ["inlet", "outlet", "wall"]
+
+    blocks = []
+    for n in region_names:
+        kind = _classify_region(n)
+        if kind == "outlet":
+            blocks.append(f"""    {n}
+    {{
+        type            fixedValue;
+        value           uniform 0;
+    }}""")
+        else:
+            blocks.append(f"""    {n}
+    {{
+        type            zeroGradient;
+    }}""")
+
+    blocks.append("""    ".*"
+    {
+        type            zeroGradient;
+    }""")
+
     return f"""{header}
 dimensions      [0 2 -2 0 0 0 0];
 
@@ -572,26 +657,7 @@ internalField   uniform 0;
 
 boundaryField
 {{
-    inlet
-    {{
-        type            zeroGradient;
-    }}
-
-    outlet
-    {{
-        type            fixedValue;
-        value           uniform 0;
-    }}
-
-    wall
-    {{
-        type            zeroGradient;
-    }}
-
-    ".*"
-    {{
-        type            zeroGradient;
-    }}
+{chr(10).join(blocks)}
 }}
 """
 
@@ -708,8 +774,10 @@ def create_openfoam_case(
     if is_multi_region:
         # Already processed (scaled to metres, has named regions) — copy as-is
         shutil.copy2(str(stl_path), str(dest_stl))
-        print("  STL: multi-region (inlet/outlet/wall), already in metres")
+        region_names = parse_stl_region_names(str(stl_path))
+        print(f"  STL: multi-region, already in metres; regions={region_names}")
     else:
+        region_names = None
         # Raw STL from segmentation (mm units) — scale to metres
         try:
             import trimesh
@@ -761,7 +829,11 @@ def create_openfoam_case(
     )
     _write_file(
         system_dir / "snappyHexMeshDict",
-        generate_snappy_hex_mesh_dict(stl_filename, bbox, refinement_level, n_surface_layers, multi_region=is_multi_region, bbox_in_metres=is_multi_region),
+        generate_snappy_hex_mesh_dict(
+            stl_filename, bbox, refinement_level, n_surface_layers,
+            multi_region=is_multi_region, bbox_in_metres=is_multi_region,
+            region_names=region_names,
+        ),
     )
     _write_file(
         system_dir / "controlDict",
@@ -778,9 +850,14 @@ def create_openfoam_case(
     zero_dir = case_dir / "0"
     _write_file(
         zero_dir / "U",
-        generate_initial_conditions_u("constant/inlet_waveform.csv"),
+        generate_initial_conditions_u(
+            "constant/inlet_waveform.csv", region_names=region_names
+        ),
     )
-    _write_file(zero_dir / "p", generate_initial_conditions_p())
+    _write_file(
+        zero_dir / "p",
+        generate_initial_conditions_p(region_names=region_names),
+    )
 
     # Write run script
     run_script = case_dir / "run.sh"
