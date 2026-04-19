@@ -40,6 +40,7 @@ from typing import Dict, List
 
 import numpy as np
 import trimesh
+from scipy.spatial import cKDTree
 
 from twin_core.cfd_pipeline.cut_valve_openings import (
     find_chamber_base,
@@ -89,9 +90,13 @@ def classify_la_multipv(
 
     # 2. Per-PV inlet caps
     inlet_masks: List[np.ndarray] = []
-    for pv in pv_meshes:
-        _, dists, _ = trimesh.proximity.closest_point(pv, face_centers)
+    for i, pv in enumerate(pv_meshes, start=1):
+        print(f"  [PV_{i}] building KDTree ({len(pv.vertices)} vertices)...", flush=True)
+        tree = cKDTree(pv.vertices)
+        print(f"  [PV_{i}] querying {len(face_centers)} face centers...", flush=True)
+        dists, _ = tree.query(face_centers, k=1)
         near_pv = dists < proximity_threshold
+        print(f"  [PV_{i}] near-PV faces: {int(near_pv.sum())}", flush=True)
 
         pv_axis = _pca_long_axis(pv.vertices)
         pv_centroid = pv.vertices.mean(axis=0)
