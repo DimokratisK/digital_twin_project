@@ -22,7 +22,7 @@ References
 [2] Koizumi R, Funamoto K, Hayase T, Kanke Y, Shibata M, Shiraishi Y,
     Yambe T. "Numerical analysis of hemodynamic changes in the left atrium
     due to atrial fibrillation." J Biomech 48(3):472-478, 2015.
-    doi:10.1016/S0021-9290(14)00679-4
+    DOI: 10.1016/j.jbiomech.2014.12.025
 
 [3] Masci A, Alessandrini M, Forti D, Menghini F, Dede L, Tommasi C,
     Quarteroni A, Corsi C. "A Patient-Specific Computational Fluid Dynamics
