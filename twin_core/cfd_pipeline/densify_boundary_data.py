@@ -207,13 +207,14 @@ def load_stl_frames(stl_dir: Path, n_frames: int) -> list[np.ndarray]:
 
 def precompute_barycentric(
     frame0_vertices: np.ndarray, frame0_faces: np.ndarray, target_pts: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """For each target point, find closest face on frame-0 surface + barycentric coords.
 
     Returns
     -------
     face_ids : (M,) int64
     bary     : (M, 3) float64, rows sum to ~1
+    dist     : (M,) float64, distance from each target to its closest frame-0 face
     """
     surface = trimesh.Trimesh(
         vertices=frame0_vertices, faces=frame0_faces, process=False
@@ -226,7 +227,7 @@ def precompute_barycentric(
     )
     triangles = surface.triangles[face_ids]  # (M, 3, 3)
     bary = trimesh.triangles.points_to_barycentric(triangles, closest)
-    return face_ids, bary
+    return face_ids, bary, dist
 
 
 def displacement_at_targets(
@@ -235,11 +236,20 @@ def displacement_at_targets(
     faces: np.ndarray,
     face_ids: np.ndarray,
     bary: np.ndarray,
+    freeze_mask: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Interpolate per-vertex displacement (frame - frame0) onto target points."""
+    """Interpolate per-vertex displacement (frame - frame0) onto target points.
+
+    Targets where freeze_mask is True get zero displacement (e.g. cut-plane rim
+    vertices that are far from the frame-0 surface and would otherwise receive
+    extrapolated nonsense).
+    """
     disp_per_vertex = frame_vertices - frame0_vertices  # (V, 3)
     tri_disp = disp_per_vertex[faces[face_ids]]  # (M, 3, 3)
-    return np.einsum("mi,mij->mj", bary, tri_disp)  # (M, 3)
+    out = np.einsum("mi,mij->mj", bary, tri_disp)  # (M, 3)
+    if freeze_mask is not None:
+        out[freeze_mask] = 0.0
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +301,10 @@ def main() -> None:
                    help="Switch inlet/outlet pointDisplacement BC to fixedValue (0 0 0)")
     p.add_argument("--no-freeze-cut-planes", dest="freeze_cut_planes",
                    action="store_false")
+    p.add_argument("--freeze-distance", type=float, default=1e-3,
+                   help="Mesh wall vertices farther than this many metres from the "
+                        "frame-0 STL surface get zero displacement (default: 1e-3 m). "
+                        "Set to a large value (e.g. 1.0) to disable filtering.")
     args = p.parse_args()
 
     case_dir: Path = args.case.expanduser().resolve()
@@ -327,7 +341,12 @@ def main() -> None:
     frame_faces = np.asarray(template_mesh.faces, dtype=np.int64)
 
     print("\nStep 3: Computing closest-face + barycentric for each mesh vertex...")
-    face_ids, bary = precompute_barycentric(frames[0], frame_faces, patch_pts)
+    face_ids, bary, dist = precompute_barycentric(frames[0], frame_faces, patch_pts)
+    freeze_mask = dist > args.freeze_distance
+    print(
+        f"  Freeze filter: {freeze_mask.sum()} / {len(patch_pts)} vertices "
+        f"> {args.freeze_distance:.3e} m -> pinned to zero displacement"
+    )
 
     # 3. Backup existing data, write new points file
     print("\nStep 4: Backing up existing boundaryData and writing new points file...")
@@ -362,7 +381,8 @@ def main() -> None:
             frame_idx = int(round(t_in_cycle / args.cardiac_cycle * args.frames))
             frame_idx %= args.frames
             disp = displacement_at_targets(
-                frames[frame_idx], frames[0], frame_faces, face_ids, bary
+                frames[frame_idx], frames[0], frame_faces, face_ids, bary,
+                freeze_mask=freeze_mask,
             )
         write_vector_list(td / "pointDisplacement", disp)
     print(f"  Regenerated {n_existing} pointDisplacement files")
