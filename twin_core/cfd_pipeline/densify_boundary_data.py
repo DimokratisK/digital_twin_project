@@ -169,6 +169,29 @@ def patch_unique_vertex_indices(
     return np.array(list(seen.keys()), dtype=np.int64)
 
 
+def shared_vertex_mask(
+    wall_vert_idx: np.ndarray,
+    faces: list[list[int]],
+    boundary: dict[str, tuple[int, int]],
+    wall_patch_name: str,
+) -> np.ndarray:
+    """Mask over wall_vert_idx: True for vertices that ALSO appear in any non-wall patch.
+
+    These are the cut-ring vertices on the seam between wall and inlet/outlet.
+    The inlet/outlet pointDisplacement BC pins them to zero; if the wall BC
+    sends them nonzero displacement we get a BC conflict at every shared point
+    -> mesh tearing -> Co explosion. Pinning them to zero in the wall data too
+    keeps both BCs consistent.
+    """
+    other_verts: set[int] = set()
+    for name, (start, n) in boundary.items():
+        if name == wall_patch_name:
+            continue
+        for f in faces[start : start + n]:
+            other_verts.update(f)
+    return np.array([int(v) in other_verts for v in wall_vert_idx], dtype=bool)
+
+
 # ---------------------------------------------------------------------------
 # Displacement interpolation
 # ---------------------------------------------------------------------------
@@ -301,10 +324,19 @@ def main() -> None:
                    help="Switch inlet/outlet pointDisplacement BC to fixedValue (0 0 0)")
     p.add_argument("--no-freeze-cut-planes", dest="freeze_cut_planes",
                    action="store_false")
-    p.add_argument("--freeze-distance", type=float, default=1e-3,
-                   help="Mesh wall vertices farther than this many metres from the "
-                        "frame-0 STL surface get zero displacement (default: 1e-3 m). "
-                        "Set to a large value (e.g. 1.0) to disable filtering.")
+    p.add_argument("--freeze-distance", type=float, default=1.0,
+                   help="Optional supplementary distance freeze: wall vertices farther "
+                        "than this many metres from the frame-0 STL surface get zero "
+                        "displacement. Default 1.0 m = effectively disabled. Distance "
+                        "freezing was found to create discontinuities (frozen vertex "
+                        "next to moving neighbour -> tearing). Use topology freeze "
+                        "(automatic, on by default) instead.")
+    p.add_argument("--no-topology-freeze", dest="topology_freeze",
+                   action="store_false", default=True,
+                   help="Disable the topology-based freeze of cut-ring vertices "
+                        "shared with inlet/outlet patches. NOT recommended — these "
+                        "shared points have conflicting BCs (wall: move, inlet: "
+                        "fixed) and tear the mesh if not pinned.")
     args = p.parse_args()
 
     case_dir: Path = args.case.expanduser().resolve()
@@ -342,11 +374,25 @@ def main() -> None:
 
     print("\nStep 3: Computing closest-face + barycentric for each mesh vertex...")
     face_ids, bary, dist = precompute_barycentric(frames[0], frame_faces, patch_pts)
-    freeze_mask = dist > args.freeze_distance
-    print(
-        f"  Freeze filter: {freeze_mask.sum()} / {len(patch_pts)} vertices "
-        f"> {args.freeze_distance:.3e} m -> pinned to zero displacement"
-    )
+
+    if args.topology_freeze:
+        topology_mask = shared_vertex_mask(patch_vert_idx, faces, boundary, args.patch)
+        print(
+            f"  Topology freeze: {topology_mask.sum()} / {len(patch_pts)} wall "
+            f"vertices shared with non-wall patches (cut-ring) -> pinned to zero"
+        )
+    else:
+        topology_mask = np.zeros(len(patch_pts), dtype=bool)
+        print("  Topology freeze: disabled by --no-topology-freeze")
+
+    distance_mask = dist > args.freeze_distance
+    if distance_mask.any():
+        print(
+            f"  Distance freeze: {distance_mask.sum()} / {len(patch_pts)} vertices "
+            f"> {args.freeze_distance:.3e} m -> pinned to zero"
+        )
+    freeze_mask = topology_mask | distance_mask
+    print(f"  Combined freeze mask: {freeze_mask.sum()} / {len(patch_pts)} vertices")
 
     # 3. Backup existing data, write new points file
     print("\nStep 4: Backing up existing boundaryData and writing new points file...")
