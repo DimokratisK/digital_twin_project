@@ -43,7 +43,8 @@ import trimesh
 # ---------------------------------------------------------------------------
 
 _VEC_RE = re.compile(r"\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*\)")
-_FACE_RE = re.compile(r"(\d+)\s*\(([^)]*)\)")
+# Body restricted to digits/whitespace so we never accidentally match across a face boundary.
+_FACE_RE = re.compile(r"(\d+)\s*\(\s*([\d\s]*?)\s*\)")
 _PATCH_RE = re.compile(
     r"(\w+)\s*\{[^}]*?type\s+(\w+)\s*;\s*[^}]*?nFaces\s+(\d+)\s*;\s*[^}]*?startFace\s+(\d+)\s*;[^}]*?\}",
     re.DOTALL,
@@ -94,7 +95,16 @@ def parse_points(polymesh_dir: Path) -> np.ndarray:
 
 
 def parse_faces(polymesh_dir: Path) -> list[list[int]]:
-    """Return faces as a list of vertex-index lists."""
+    """Return faces as a list of vertex-index lists.
+
+    Expected ASCII layout (OF11 default):
+        NFACES
+        (
+        N0(v0 v1 ... vN0-1)
+        N1(v0 v1 ... vN1-1)
+        ...
+        )
+    """
     path = polymesh_dir / "faces"
     if _detect_binary(path):
         raise RuntimeError(
@@ -102,15 +112,31 @@ def parse_faces(polymesh_dir: Path) -> list[list[int]]:
             "before running this script."
         )
     text = _strip_foam_header(path.read_text())
+    # Strip the outer list opener "NFACES\n(" so its NFACES doesn't get parsed as a face header.
+    m = re.search(r"^\s*(\d+)\s*\(", text)
+    if not m:
+        raise RuntimeError(f"Could not locate outer face list opener in {path}")
+    expected_n = int(m.group(1))
+    inner = text[m.end():]
+    # Cut off the trailing closing paren of the outer list, if present.
+    last_paren = inner.rfind(")")
+    if last_paren >= 0:
+        inner = inner[:last_paren]
     faces: list[list[int]] = []
-    for n_str, body in _FACE_RE.findall(text):
+    for n_str, body in _FACE_RE.findall(inner):
         idx = [int(x) for x in body.split()]
         if len(idx) != int(n_str):
             raise RuntimeError(
                 f"Face vertex count mismatch in {path}: header={n_str} body={idx}"
             )
         faces.append(idx)
-    print(f"  Parsed {len(faces)} mesh faces from {path.name}")
+    print(f"  Parsed {len(faces)} mesh faces from {path.name} "
+          f"(expected {expected_n})")
+    if len(faces) != expected_n:
+        raise RuntimeError(
+            f"Face count mismatch: parsed {len(faces)} but file declares {expected_n}. "
+            f"polyMesh/faces may be in a format this script doesn't handle."
+        )
     return faces
 
 
