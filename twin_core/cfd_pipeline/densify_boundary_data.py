@@ -112,8 +112,10 @@ def parse_faces(polymesh_dir: Path) -> list[list[int]]:
             "before running this script."
         )
     text = _strip_foam_header(path.read_text())
+    # Drop comment lines so the outer-list-opener search is unambiguous.
+    text = re.sub(r"//.*?(?:\n|$)", "\n", text)
     # Strip the outer list opener "NFACES\n(" so its NFACES doesn't get parsed as a face header.
-    m = re.search(r"^\s*(\d+)\s*\(", text)
+    m = re.search(r"(\d+)\s*\(", text)
     if not m:
         raise RuntimeError(f"Could not locate outer face list opener in {path}")
     expected_n = int(m.group(1))
