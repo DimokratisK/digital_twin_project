@@ -102,11 +102,17 @@ def convert_prediction_to_stl(
     case_dir = output_dir / case_name
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    unique_labels = set(np.unique(mask)) - {0}
-    exported = []
+    unique_labels = set(int(v) for v in np.unique(mask)) - {0}
+    mapped_labels = set(labels.values())
+    unmapped_in_mask = sorted(unique_labels - mapped_labels)
+    if unmapped_in_mask:
+        print(f"  WARN: mask contains labels {unmapped_in_mask} not in --dataset mapping — they will NOT be exported")
+
+    exported, skipped_absent, skipped_failed = [], [], []
 
     for struct_name, label_id in labels.items():
         if label_id not in unique_labels:
+            skipped_absent.append(f"{struct_name}(label={label_id})")
             continue
 
         out_path = case_dir / f"{struct_name}.stl"
@@ -119,9 +125,18 @@ def convert_prediction_to_stl(
             smoothing_iterations=smoothing_iterations,
             smoothing_method=smoothing_method,
             decimate_ratio=decimate_ratio,
+            keep_largest_component=False,
         )
         if mesh is not None:
             exported.append(struct_name)
+        else:
+            skipped_failed.append(f"{struct_name}(label={label_id})")
+
+    print(f"  Mask labels present (non-bg): {sorted(unique_labels)}")
+    if skipped_absent:
+        print(f"  Absent from mask: {', '.join(skipped_absent)}")
+    if skipped_failed:
+        print(f"  Mesh extraction FAILED for: {', '.join(skipped_failed)}")
 
     return exported
 

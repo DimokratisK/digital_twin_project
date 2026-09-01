@@ -196,6 +196,7 @@ def mask_to_mesh(
     decimate_target_faces: Optional[int] = None,
     decimate_ratio: Optional[float] = None,
     overwrite: bool = True,
+    keep_largest_component: bool = True,
 ) -> Optional[trimesh.Trimesh]:
     """
     Convert a labeled volume or binary mask to an STL mesh and save it.
@@ -231,10 +232,10 @@ def mask_to_mesh(
     binary = _extract_class(mask_vol, class_id)
 
     if postprocess:
-        # Fill holes and remove tiny objects
         binary = _fill_holes_3d(binary)
         binary = _remove_small_objects(binary, min_size=min_component_size)
-        binary = _keep_largest_component(binary)
+        if keep_largest_component:
+            binary = _keep_largest_component(binary)
 
     # If after cleaning nothing remains, abort gracefully
     if binary.sum() == 0:
