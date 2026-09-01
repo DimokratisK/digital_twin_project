@@ -38,6 +38,30 @@ import nibabel as nib
 ACDC_LABELS = {0: "BG", 1: "RV", 2: "MYO", 3: "LV"}
 ACDC_COLORS = ["#000000", "#ffd700", "#4daf4a", "#ff0000"]  # BG, RV, MYO, LV
 
+# Bjonze 11-class cardiac CT
+BJONZE_LABELS = {
+    0: "BG", 1: "Myocardium", 2: "LA", 3: "LV", 4: "RA", 5: "RV",
+    6: "Aorta", 7: "PA", 8: "LAA", 9: "Coronary", 10: "PV",
+}
+BJONZE_COLORS = [
+    "#000000",  # 0  BG
+    "#8b4513",  # 1  Myocardium — brown
+    "#4169e1",  # 2  LA         — royal blue
+    "#dc143c",  # 3  LV         — crimson
+    "#00ced1",  # 4  RA         — dark turquoise
+    "#4daf4a",  # 5  RV         — green
+    "#9370db",  # 6  Aorta      — purple
+    "#ff69b4",  # 7  PA         — pink
+    "#ffd700",  # 8  LAA        — gold
+    "#ff8c00",  # 9  Coronary   — orange
+    "#32cd32",  # 10 PV         — lime
+]
+
+DATASET_MAPS = {
+    "acdc": (ACDC_LABELS, ACDC_COLORS),
+    "bjonze": (BJONZE_LABELS, BJONZE_COLORS),
+}
+
 
 def make_overlay_figure(
     image_slice: np.ndarray,
@@ -176,6 +200,10 @@ def main():
         "--slices", type=int, nargs="+", default=None,
         help="Specific z-slice indices to visualize (default: auto-pick)"
     )
+    parser.add_argument(
+        "--dataset", type=str, default="acdc", choices=list(DATASET_MAPS.keys()),
+        help="Label/color scheme (default: acdc)"
+    )
 
     args = parser.parse_args()
 
@@ -183,6 +211,7 @@ def main():
     gt_dir = Path(args.gt_dir)
     img_dir = Path(args.img_dir)
     output_dir = Path(args.output_dir)
+    labels, colors = DATASET_MAPS[args.dataset]
 
     if args.cases:
         cases = args.cases
@@ -205,6 +234,8 @@ def main():
             pred_dir=pred_dir,
             output_dir=output_dir,
             slices=args.slices,
+            labels=labels,
+            colors=colors,
         )
 
     print(f"\nDone. Overlays saved to {output_dir}")

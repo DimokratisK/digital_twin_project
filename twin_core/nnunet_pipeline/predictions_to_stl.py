@@ -44,6 +44,18 @@ DATASET_LABELS = {
         "Aorta": 6,
         "PA": 7,
     },
+    "bjonze": {
+        "Myocardium": 1,
+        "LA": 2,
+        "LV": 3,
+        "RA": 4,
+        "RV": 5,
+        "Aorta": 6,
+        "PA": 7,
+        "LAA": 8,
+        "Coronary": 9,
+        "PV": 10,
+    },
     "bjonze_cfd": {
         "LA": 1,
         "LAA": 2,
